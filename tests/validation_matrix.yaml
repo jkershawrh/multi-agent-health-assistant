@@ -1,0 +1,174 @@
+# Validation Matrix -- CDD -> TDD -> EDD
+# Write tests RED, deploy until GREEN. Each stage gates the next.
+
+stages:
+
+  stage_0_contracts:
+    description: "All API contracts defined and parseable"
+    threshold: 100
+    criteria:
+      openapi_spec_valid:
+        description: "OpenAPI spec validates against 3.1"
+        points: 25
+        required: true
+      openapi_has_paths:
+        description: "Spec defines at least one path with operations"
+        points: 25
+        required: true
+      openapi_refs_resolve:
+        description: "All $ref pointers resolve within the spec"
+        points: 25
+        required: true
+      openapi_responses_defined:
+        description: "Every operation has at least one response schema"
+        points: 25
+        required: true
+
+  stage_1_infrastructure:
+    description: "Containers build, services start, health checks pass"
+    threshold: 90
+    criteria:
+      container_builds:
+        description: "Containerfile builds successfully"
+        points: 20
+        required: true
+      compose_stack_starts:
+        description: "docker-compose stack starts with all health checks passing"
+        points: 20
+        required: true
+      four_services_healthy:
+        description: "Orchestrator + 3 agents all respond to /health"
+        points: 20
+        required: true
+      no_hardcoded_secrets:
+        description: "No API keys, passwords, or secrets in source code"
+        points: 20
+        required: true
+      helm_template_renders:
+        description: "Helm chart renders cleanly with default values"
+        points: 20
+        required: true
+
+  stage_2_unit:
+    description: "A2A protocol and multi-agent orchestration work in isolation"
+    threshold: 90
+    criteria:
+      agent_card_served:
+        description: "Agent returns valid A2A agent card at /.well-known/agent-card.json"
+        points: 15
+        required: true
+      a2a_task_send:
+        description: "tasks/send creates and returns completed task with artifacts"
+        points: 15
+        required: true
+      orchestrator_discovers_agents:
+        description: "Orchestrator discovers agents via agent card endpoint"
+        points: 15
+        required: true
+      workflow_completes:
+        description: "triage -> clinical -> scheduling workflow runs to completion"
+        points: 15
+        required: true
+      each_agent_responds:
+        description: "Each of 3 agents handles tasks independently"
+        points: 15
+        required: true
+      demo_mode_works:
+        description: "All agents function in demo mode without LLM backends"
+        points: 15
+        required: true
+      workflow_latency:
+        description: "Each workflow step reports positive latency_ms"
+        points: 10
+        required: true
+
+  stage_3_integration:
+    description: "End-to-end flow works from orchestrator through all agents"
+    threshold: 85
+    criteria:
+      full_workflow_flow:
+        description: "Orchestrator -> triage -> clinical -> scheduling completes"
+        points: 25
+        required: true
+      response_has_real_metrics:
+        description: "Response contains real agent names and measured latency"
+        points: 15
+        required: true
+      no_hardcoded_latency:
+        description: "No hardcoded ms values displayed as live measurements"
+        points: 15
+        required: true
+      ai_transparency_labels:
+        description: "AI-generated content labeled with persistent disclaimers"
+        points: 10
+        required: true
+      health_endpoint:
+        description: "Health endpoint returns service status + agent count"
+        points: 10
+        required: true
+      error_handling:
+        description: "Agent unavailability produces user-friendly message"
+        points: 10
+        required: true
+      compose_15_min:
+        description: "docker compose up -> working demo in <= 15 minutes"
+        points: 15
+        required: true
+
+  stage_4_benchmarks:
+    description: "Performance claims meet thresholds"
+    threshold: 80
+    criteria:
+      workflow_under_5s:
+        description: "3-agent workflow completes in under 5 seconds in demo mode"
+        points: 50
+        required: true
+      agent_discovery_under_2s:
+        description: "Agent discovery completes in under 2 seconds"
+        points: 50
+        required: true
+
+  stage_5_publication:
+    description: "README passes automated review with zero BLOCKERs"
+    threshold: 100
+    criteria:
+      title_format:
+        description: "H1 title <= 64 chars, starts with action verb"
+        points: 10
+        required: true
+      short_description:
+        description: "Short description <= 160 chars"
+        points: 10
+        required: true
+      required_sections:
+        description: "All required README sections present in correct order"
+        points: 15
+        required: true
+      architecture_diagram:
+        description: "Architecture diagram in docs/images/ with alt text"
+        points: 10
+        required: true
+      no_credentials:
+        description: "No hardcoded credentials in repo"
+        points: 15
+        required: true
+      links_resolve:
+        description: "All links (internal + external) resolve"
+        points: 10
+        required: true
+      industry_tag:
+        description: "Industry tag from approved list"
+        points: 10
+        required: true
+      tag_format:
+        description: "Tags as bulleted list with bold key and normal value"
+        points: 5
+        required: true
+      opl_compliance:
+        description: "Red Hat trademark first-mention-only rule"
+        points: 10
+        required: true
+      accessibility:
+        description: "WCAG 2.2 AA: heading nesting, alt text, descriptive links"
+        points: 5
+        required: true

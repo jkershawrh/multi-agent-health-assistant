@@ -1,0 +1,120 @@
+version: "3.8"
+
+services:
+  orchestrator:
+    build:
+      context: ./src
+      dockerfile: Containerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - AGENT_URLS=http://triage-agent:8001,http://clinical-agent:8002,http://scheduling-agent:8003
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    command: ["uvicorn", "orchestrator:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      triage-agent:
+        condition: service_healthy
+      clinical-agent:
+        condition: service_healthy
+      scheduling-agent:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama-pull:
+    image: ollama/ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["ollama", "pull", "qwen2.5:1.5b"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+
+  triage-agent:
+    build:
+      context: ./src
+      dockerfile: Containerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - AGENT_NAME=triage
+      - AGENT_SKILLS=classify,prioritize
+      - AGENT_PORT=8001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MODEL_ENDPOINT=http://ollama:11434/v1
+      - MODEL_NAME=qwen2.5:1.5b
+    command: ["uvicorn", "agent:app", "--host", "0.0.0.0", "--port", "8001"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+
+  clinical-agent:
+    build:
+      context: ./src
+      dockerfile: Containerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - AGENT_NAME=clinical
+      - AGENT_SKILLS=diagnose,recommend
+      - AGENT_PORT=8002
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MODEL_ENDPOINT=http://ollama:11434/v1
+      - MODEL_NAME=qwen2.5:1.5b
+    command: ["uvicorn", "agent:app", "--host", "0.0.0.0", "--port", "8002"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+
+  scheduling-agent:
+    build:
+      context: ./src
+      dockerfile: Containerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - AGENT_NAME=scheduling
+      - AGENT_SKILLS=schedule,notify
+      - AGENT_PORT=8003
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MODEL_ENDPOINT=http://ollama:11434/v1
+      - MODEL_NAME=qwen2.5:1.5b
+    command: ["uvicorn", "agent:app", "--host", "0.0.0.0", "--port", "8003"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+
+volumes:
+  ollama_data:

@@ -1,0 +1,29 @@
+# Claim Provenance Registry -- every factual assertion in the quickstart
+# Run `make audit-claims` to see unverified claims
+#
+# Rules:
+#   - Every number shown in the UI MUST have an entry here
+#   - Claims with verified: false display with "projected" or "paper reference" label
+#   - Speedup claims require minimum_speedup_for_claim threshold met on live hardware
+#   - Cost claims use "contributes to" / "estimate" language, never "guaranteed"
+
+claims:
+  - id: a2a-protocol
+    value: "Agent-to-Agent protocol for discovery and delegation"
+    file: src/orchestrator.py
+    line: 1
+    source: "A2A protocol spec v0.2.6 -- implemented via /.well-known/agent-card.json and /a2a JSON-RPC"
+    source_url: ""
+    verified: true
+    verified_date: "2025-01-15"
+    notes: "Protocol compliance verified by unit tests: agent card served, tasks/send works, tasks/get works"
+
+  - id: multi-agent-workflow
+    value: "3-agent cooperative workflow"
+    file: src/orchestrator.py
+    line: 120
+    source: "Demonstrated by triage -> clinical -> scheduling pipeline executing in sequence via A2A"
+    source_url: ""
+    verified: true
+    verified_date: "2025-01-15"
+    notes: "Workflow completion verified by unit test: test_workflow_completes"

@@ -1,0 +1,71 @@
+---
+# LLM configuration
+#
+# Option A: Bring your own model (MaaS - Model as a Service)
+# model:
+#   name: my-model
+#   endpoint: https://my-maas-instance:443
+#   api_key: my-api-key
+#
+# Option B: Deploy with demo mode (no model required)
+model: {}
+
+# Orchestrator configuration
+orchestrator:
+  replicas: 1
+  image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-orchestrator:latest
+  port: 8000
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "256Mi"
+    limits:
+      cpu: "2"
+      memory: "512Mi"
+
+# Agent configurations -- each runs on a dedicated Intel Xeon core
+agents:
+  triage:
+    replicas: 1
+    image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-agent:latest
+    port: 8001
+    env:
+      AGENT_NAME: triage
+      AGENT_SKILLS: classify,prioritize
+    resources:
+      requests:
+        cpu: "1"
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "512Mi"
+
+  clinical:
+    replicas: 1
+    image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-agent:latest
+    port: 8002
+    env:
+      AGENT_NAME: clinical
+      AGENT_SKILLS: diagnose,recommend
+    resources:
+      requests:
+        cpu: "1"
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "512Mi"
+
+  scheduling:
+    replicas: 1
+    image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-agent:latest
+    port: 8003
+    env:
+      AGENT_NAME: scheduling
+      AGENT_SKILLS: schedule,notify
+    resources:
+      requests:
+        cpu: "1"
+        memory: "256Mi"
+      limits:
+        cpu: "1"
+        memory: "512Mi"

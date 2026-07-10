@@ -1,0 +1,44 @@
+# Benchmark Rubric -- technique-specific performance validation
+# Governs Stage 4 of the validation matrix.
+
+benchmark_rubric:
+  version: "1.0"
+  description: "Performance validation for multi-agent healthcare workflow"
+
+  verification_policy:
+    verified_means: "Measured by a live endpoint in the target environment"
+    public_claim_rules:
+      - "Do not publish speedup claims unless claim_registry marks them verified"
+      - "If a feature is configured but unmeasured, present as 'configured and measured'"
+      - "Cost claims use 'estimate' language, never 'guaranteed'"
+
+  run_modes:
+    local:
+      description: "Unit tests, contract validation, static checks"
+      no_cluster_required: true
+    compose:
+      description: "Full docker-compose stack with 4 services in demo mode"
+      requires: ["podman", "docker-compose"]
+    openshift:
+      description: "Helm deployment on OpenShift with full validation"
+      requires: ["oc", "helm"]
+
+  benchmarks:
+    workflow_latency:
+      description: "3-agent workflow (triage -> clinical -> scheduling) end-to-end latency"
+      test_query: "Patient presents with acute chest pain, elevated troponin, and shortness of breath"
+      max_ms: 5000
+      required_fields: ["steps", "total_latency_ms", "agents_involved"]
+      notes: "Measured in demo mode. Live mode latency depends on LLM backend."
+
+    agent_discovery:
+      description: "Time to discover all 3 agents via A2A protocol"
+      max_ms: 2000
+      required_fields: ["agents", "count"]
+      notes: "Includes HTTP GET to /.well-known/agent-card.json for each agent."
+
+    individual_agent_response:
+      description: "Single agent task response latency"
+      max_ms: 1000
+      required_fields: ["result", "status"]
+      notes: "Per-agent latency in demo mode."
