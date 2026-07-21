@@ -1,6 +1,6 @@
-# Orchestrate healthcare AI agents with A2A protocol
+# Coordinate AI agents to assist healthcare workflows
 
-Deploy cooperating AI agents that discover, delegate, and stream results using the Agent-to-Agent protocol.
+Deploy cooperating AI agents that discover, delegate, and stream results to support clinical and administrative tasks.
 
 ## Table of Contents
 
@@ -242,8 +242,8 @@ oc delete project multi-agent-health-assistant
 
 ## Tags
 
-- **Title:** Orchestrate healthcare AI agents with A2A protocol
-- **Description:** Deploy cooperating AI agents that discover, delegate, and stream results using the Agent-to-Agent protocol.
+- **Title:** Coordinate AI agents to assist healthcare workflows
+- **Description:** Deploy cooperating AI agents that discover, delegate, and stream results to support clinical and administrative tasks.
 - **Industry:** Healthcare provider
 - **Product:** Red Hat OpenShift AI
 - **Use case:** AI inference
