@@ -25,6 +25,17 @@ spec:
           env:
             - name: AGENT_URLS
               value: "http://{{ .Release.Name }}-triage:{{ .Values.agents.triage.port }},http://{{ .Release.Name }}-clinical:{{ .Values.agents.clinical.port }},http://{{ .Release.Name }}-scheduling:{{ .Values.agents.scheduling.port }}"
+            {{- if .Values.semanticRouter.enabled }}
+            - name: SEMANTIC_ROUTER_ENDPOINT
+              value: "{{ .Release.Name }}-semantic-router:{{ .Values.semanticRouter.grpcPort }}"
+            {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: AGENT_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.tokenSecretName }}
+                  key: token
+            {{- end }}
           resources:
             {{- toYaml .Values.orchestrator.resources | nindent 12 }}
           livenessProbe:

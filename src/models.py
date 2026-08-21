@@ -99,9 +99,22 @@ class DiscoveredAgent(BaseModel):
     skills: List[AgentSkill] = []
 
 
+class ClassificationSignal(BaseModel):
+    label: str
+    score: float
+
+
+class ClassificationResult(BaseModel):
+    classifier_id: str
+    status: str
+    signals: List[ClassificationSignal] = []
+    selected_workflow: str
+    latency_ms: float
+
+
 class WorkflowRequest(BaseModel):
     query: str
-    workflow_type: str = "general"
+    workflow_type: str = "auto"
 
 
 class WorkflowStep(BaseModel):
@@ -115,6 +128,7 @@ class WorkflowResponse(BaseModel):
     steps: List[WorkflowStep]
     total_latency_ms: float
     agents_involved: List[str]
+    classification: Optional[ClassificationResult] = None
     ai_disclaimer: str = (
         "Agent responses are AI-generated -- verify clinical "
         "recommendations with qualified healthcare professionals."

@@ -8,6 +8,7 @@ Each agent instance is configured via environment variables:
 Demo mode: all agents return simulated responses without LLM backends.
 """
 
+import json
 import logging
 import os
 import random
@@ -20,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 import models
+from auth import TokenAuthMiddleware
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("a2a-agent")
@@ -31,6 +33,7 @@ AGENT_SKILLS_RAW = os.environ.get("AGENT_SKILLS", "respond")
 MODEL_ENDPOINT = os.environ.get("MODEL_ENDPOINT", "")
 MODEL_NAME = os.environ.get("MODEL_NAME", "qwen2.5:1.5b")
 DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("true", "1", "yes")
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "")
 
 AI_DISCLAIMER = (
     "Agent responses are AI-generated -- verify clinical "
@@ -234,6 +237,86 @@ async def _llm_response(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# MCP tool calling
+# ---------------------------------------------------------------------------
+
+TOOL_KEYWORDS = {
+    "lookup_patient_record": ["patient record", "patient history", "medical record", "pat-"],
+    "check_drug_interactions": ["drug interaction", "medication interaction", "drug-drug", "medications"],
+    "find_available_slots": ["appointment", "schedule", "available slot", "book", "follow-up"],
+}
+
+
+async def _call_mcp_tools(text: str) -> str:
+    """Call relevant MCP tools based on query content and return results."""
+    if not MCP_SERVER_URL:
+        return ""
+
+    text_lower = text.lower()
+    tools_to_call = []
+    for tool_name, keywords in TOOL_KEYWORDS.items():
+        if any(kw in text_lower for kw in keywords):
+            tools_to_call.append(tool_name)
+
+    if not tools_to_call:
+        return ""
+
+    results = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for tool_name in tools_to_call:
+                arguments = _build_tool_arguments(tool_name, text)
+                resp = await client.post(
+                    f"{MCP_SERVER_URL}/mcp",
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": str(uuid.uuid4()),
+                        "method": "tools/call",
+                        "params": {"name": tool_name, "arguments": arguments},
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    result = data.get("result", {})
+                    content = result.get("content", [])
+                    for item in content:
+                        if item.get("text"):
+                            results.append(f"[{tool_name}]: {item['text']}")
+                            logger.info("MCP tool call: %s", tool_name)
+    except Exception as e:
+        logger.warning("MCP tool call failed: %s", e)
+
+    return "\n".join(results)
+
+
+def _build_tool_arguments(tool_name: str, text: str) -> dict:
+    """Extract tool arguments from query text (best-effort for demo)."""
+    text_lower = text.lower()
+    if tool_name == "lookup_patient_record":
+        for token in text.split():
+            if token.upper().startswith("PAT-"):
+                return {"patient_id": token.upper()}
+        return {"patient_id": "PAT-001"}
+    elif tool_name == "check_drug_interactions":
+        known_drugs = ["metformin", "lisinopril", "aspirin", "warfarin", "albuterol", "potassium"]
+        found = [d for d in known_drugs if d in text_lower]
+        return {"medications": found if found else ["metformin", "lisinopril"]}
+    elif tool_name == "find_available_slots":
+        dept = "general"
+        for d in ["cardiology", "orthopedics", "general"]:
+            if d in text_lower:
+                dept = d
+                break
+        urgency = "routine"
+        for u in ["critical", "urgent"]:
+            if u in text_lower:
+                urgency = u
+                break
+        return {"department": dept, "urgency": urgency}
+    return {}
+
+
+# ---------------------------------------------------------------------------
 # FastAPI application
 # ---------------------------------------------------------------------------
 
@@ -242,6 +325,7 @@ app = FastAPI(
     description=f"A2A-compliant {AGENT_NAME} agent for healthcare workflows.",
     version="1.0.0",
 )
+app.add_middleware(TokenAuthMiddleware)
 
 
 @app.get("/health")
@@ -275,10 +359,18 @@ async def a2a_endpoint(request: models.JsonRpcRequest):
         text = parts[0].get("text", "") if parts else ""
 
         start = time.monotonic()
+
+        tool_context = await _call_mcp_tools(text)
+        enriched_text = f"{text}\n\nTool results:\n{tool_context}" if tool_context else text
+
         if MODEL_ENDPOINT and not DEMO_MODE:
-            response_text = await _llm_response(text)
+            response_text = await _llm_response(enriched_text)
         else:
             response_text = _demo_response(text)
+
+        if tool_context:
+            response_text = f"{response_text}\n\n[MCP tool data retrieved]\n{tool_context}"
+
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 
         # Simulate realistic processing time (demo mode only)

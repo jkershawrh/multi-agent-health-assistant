@@ -21,6 +21,15 @@ import uvicorn
 from fastapi import FastAPI
 
 import models
+from auth import TokenAuthMiddleware, AGENT_AUTH_TOKEN
+
+try:
+    import grpc
+    import classify_pb2
+    import classify_pb2_grpc
+    GRPC_AVAILABLE = True
+except ImportError:
+    GRPC_AVAILABLE = False
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("orchestrator")
@@ -36,6 +45,8 @@ AGENT_URLS = os.environ.get(
     "http://triage-agent:8001,http://clinical-agent:8002,http://scheduling-agent:8003",
 )
 
+SEMANTIC_ROUTER_ENDPOINT = os.environ.get("SEMANTIC_ROUTER_ENDPOINT", "")
+
 
 # ---------------------------------------------------------------------------
 # A2A Client
@@ -47,6 +58,11 @@ class A2AClient:
 
     def __init__(self):
         self.agents: Dict[str, models.DiscoveredAgent] = {}
+
+    def _auth_headers(self) -> dict:
+        if AGENT_AUTH_TOKEN:
+            return {"Authorization": f"Bearer {AGENT_AUTH_TOKEN}"}
+        return {}
 
     async def discover(self, base_url: str) -> Optional[models.DiscoveredAgent]:
         """Fetch /.well-known/agent-card.json and register the agent."""
@@ -101,6 +117,7 @@ class A2AClient:
                 resp = await client.post(
                     f"{agent.url}/a2a",
                     json=rpc_request,
+                    headers=self._auth_headers(),
                 )
                 resp.raise_for_status()
                 return resp.json()
@@ -116,11 +133,97 @@ class A2AClient:
 
 
 # ---------------------------------------------------------------------------
+# Semantic Router (llm-d-sc integration)
+# ---------------------------------------------------------------------------
+
+COMPLEXITY_TO_WORKFLOW = {
+    "SIMPLE": "lightweight",
+    "MEDIUM": "standard",
+    "COMPLEX": "comprehensive",
+    "REASONING": "comprehensive",
+}
+
+
+class SemanticRouter:
+    """Classifies queries via llm-d-sc gRPC and selects workflows."""
+
+    def __init__(self, endpoint: str):
+        self.endpoint = endpoint
+        self.channel = None
+        self.stub = None
+
+    async def connect(self):
+        if not GRPC_AVAILABLE:
+            logger.warning("grpc not installed -- semantic routing disabled")
+            return
+        if not self.endpoint:
+            return
+        try:
+            self.channel = grpc.aio.insecure_channel(self.endpoint)
+            self.stub = classify_pb2_grpc.ClassifyStub(self.channel)
+            logger.info("Semantic router connected: %s", self.endpoint)
+        except Exception as e:
+            logger.warning("Semantic router connection failed: %s", e)
+            self.stub = None
+
+    async def classify(self, text: str) -> Optional[models.ClassificationResult]:
+        if not self.stub:
+            return None
+        start = time.monotonic()
+        try:
+            request = classify_pb2.ClassifyRequest(
+                request_id=str(uuid.uuid4()),
+                context=text,
+            )
+            response = await self.stub.Classify(request, timeout=5.0)
+            latency_ms = round((time.monotonic() - start) * 1000, 2)
+
+            if response.status != classify_pb2.OK:
+                logger.warning(
+                    "Semantic router returned status %s", response.status
+                )
+                return None
+
+            signals = [
+                models.ClassificationSignal(label=s.label, score=round(s.score, 4))
+                for s in response.ranked
+            ]
+            top_label = signals[0].label if signals else "COMPLEX"
+            selected = COMPLEXITY_TO_WORKFLOW.get(top_label, "comprehensive")
+
+            return models.ClassificationResult(
+                classifier_id=response.classifier_id,
+                status="ok",
+                signals=signals,
+                selected_workflow=selected,
+                latency_ms=latency_ms,
+            )
+        except Exception as e:
+            logger.warning("Semantic classification failed: %s", e)
+            return None
+
+    async def close(self):
+        if self.channel:
+            await self.channel.close()
+
+
+# ---------------------------------------------------------------------------
 # Workflow engine
 # ---------------------------------------------------------------------------
 
-# Workflow definitions: each maps to an ordered list of (agent, action) pairs
 WORKFLOW_DEFINITIONS = {
+    "lightweight": [
+        ("scheduling", "schedule"),
+    ],
+    "standard": [
+        ("triage", "classify"),
+        ("scheduling", "schedule"),
+    ],
+    "comprehensive": [
+        ("triage", "classify"),
+        ("clinical", "diagnose"),
+        ("scheduling", "schedule"),
+    ],
     "patient_triage": [
         ("triage", "classify"),
         ("clinical", "diagnose"),
@@ -137,12 +240,30 @@ WORKFLOW_DEFINITIONS = {
 async def execute_workflow(
     a2a_client: A2AClient,
     query: str,
-    workflow_type: str = "general",
+    workflow_type: str = "auto",
 ) -> models.WorkflowResponse:
     """Execute a multi-agent workflow by delegating tasks sequentially."""
+    classification = None
+
+    if workflow_type == "auto" and semantic_router.stub:
+        classification = await semantic_router.classify(query)
+        if classification:
+            workflow_type = classification.selected_workflow
+            logger.info(
+                "Semantic routing: %s -> %s (top signal: %s %.3f)",
+                workflow_type,
+                classification.selected_workflow,
+                classification.signals[0].label if classification.signals else "?",
+                classification.signals[0].score if classification.signals else 0,
+            )
+        else:
+            workflow_type = "comprehensive"
+    elif workflow_type == "auto":
+        workflow_type = "comprehensive"
+
     steps_config = WORKFLOW_DEFINITIONS.get(
         workflow_type,
-        WORKFLOW_DEFINITIONS["general"],
+        WORKFLOW_DEFINITIONS["comprehensive"],
     )
 
     steps: List[models.WorkflowStep] = []
@@ -180,6 +301,7 @@ async def execute_workflow(
         steps=steps,
         total_latency_ms=total_latency,
         agents_involved=list(dict.fromkeys(agents_involved)),
+        classification=classification,
         ai_disclaimer=AI_DISCLAIMER,
     )
 
@@ -208,11 +330,15 @@ def _extract_result_text(rpc_response: dict) -> str:
 # ---------------------------------------------------------------------------
 
 a2a_client = A2AClient()
+semantic_router = SemanticRouter(SEMANTIC_ROUTER_ENDPOINT)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Discover agents on startup."""
+    """Discover agents and connect to semantic router on startup."""
+    if SEMANTIC_ROUTER_ENDPOINT:
+        await semantic_router.connect()
+
     urls = [u.strip() for u in AGENT_URLS.split(",") if u.strip()]
     logger.info("Discovering %d agents...", len(urls))
 
@@ -239,6 +365,7 @@ async def lifespan(app: FastAPI):
         len(a2a_client.list_agents()),
     )
     yield
+    await semantic_router.close()
 
 
 app = FastAPI(
@@ -250,6 +377,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.add_middleware(TokenAuthMiddleware)
 
 
 @app.get("/health")
@@ -259,6 +387,7 @@ async def health():
         "status": "healthy",
         "agents_discovered": len(agents),
         "agent_names": [a.name for a in agents],
+        "semantic_routing": "active" if semantic_router.stub else "inactive",
     }
 
 

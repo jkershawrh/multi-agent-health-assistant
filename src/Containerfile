@@ -9,6 +9,10 @@ COPY models.py .
 COPY agent.py .
 COPY orchestrator.py .
 COPY ui.py .
+COPY auth.py .
+COPY mcp_server.py .
+COPY classify_pb2.py .
+COPY classify_pb2_grpc.py .
 
 EXPOSE 8000 8001 8002 8003
 

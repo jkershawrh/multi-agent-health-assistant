@@ -62,6 +62,24 @@ fi
 
 cd "$SRC_DIR"
 
+# ── Auth token (optional) ──────────────────────────────────────────
+export AGENT_AUTH_TOKEN="${AGENT_AUTH_TOKEN:-}"
+
+# ── Start MCP tool server ──────────────────────────────────────────
+MCP_PORT=8004 python3 -m uvicorn mcp_server:app --host 127.0.0.1 --port 8004 &
+PIDS+=($!)
+export MCP_SERVER_URL="http://127.0.0.1:8004"
+
+echo -n "Waiting for MCP server..."
+for _ in $(seq 1 30); do
+    if curl -sf "http://127.0.0.1:8004/health" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+    echo -n "."
+done
+echo " ready."
+
 # ── Start 3 A2A agents ──────────────────────────────────────────────
 AGENT_NAME=triage AGENT_SKILLS=classify,prioritize AGENT_PORT=8001 \
     python3 -m uvicorn agent:app --host 127.0.0.1 --port 8001 &
@@ -87,6 +105,39 @@ for port in 8001 8002 8003; do
     done
 done
 echo " ready."
+
+# ── Semantic Router (llm-d-sc, optional) ─────────────────────────────
+USE_SEMANTIC_ROUTER=false
+if [ "${ENABLE_SEMANTIC_ROUTER:-false}" = "true" ]; then
+    if command -v llm-d-sc-server &>/dev/null || command -v llm-d-sc &>/dev/null; then
+        SC_BIN=$(command -v llm-d-sc-server 2>/dev/null || command -v llm-d-sc 2>/dev/null)
+        SC_MODEL_DIR="${LLM_D_SC_MODEL_DIR:-$SCRIPT_DIR/../llm-d-semantic-classifier/artifacts/models/complexity}"
+        if [ -d "$SC_MODEL_DIR" ] && [ -f "$SC_MODEL_DIR/model.safetensors" ]; then
+            LLM_D_SC_MODEL_DIR="$SC_MODEL_DIR" \
+            LLM_D_SC_CLASSIFIER=complexity \
+            LLM_D_SC_LISTEN=127.0.0.1:50051 \
+                "$SC_BIN" &
+            PIDS+=($!)
+            echo -n "Waiting for semantic router..."
+            for _ in $(seq 1 30); do
+                if echo > /dev/tcp/127.0.0.1/50051 2>/dev/null; then
+                    break
+                fi
+                sleep 1
+                echo -n "."
+            done
+            echo " ready."
+            export SEMANTIC_ROUTER_ENDPOINT="127.0.0.1:50051"
+            USE_SEMANTIC_ROUTER=true
+        else
+            echo "Semantic router model not found at $SC_MODEL_DIR -- skipping."
+            echo "Run: ./hack/fetch-model --classifier complexity (in llm-d-semantic-classifier/)"
+        fi
+    else
+        echo "llm-d-sc binary not found -- semantic routing disabled."
+        echo "Set ENABLE_SEMANTIC_ROUTER=false or install llm-d-sc to suppress this message."
+    fi
+fi
 
 # ── Start orchestrator (on :8000) ────────────────────────────────────
 export AGENT_URLS="http://127.0.0.1:8001,http://127.0.0.1:8002,http://127.0.0.1:8003"
@@ -118,6 +169,7 @@ echo ""
 echo "════════════════════════════════════════════════════════════"
 echo "  Multi-Agent Health Assistant — running"
 echo ""
+echo "  MCP Tool Server:  http://127.0.0.1:8004"
 echo "  Triage Agent:     http://127.0.0.1:8001"
 echo "  Clinical Agent:   http://127.0.0.1:8002"
 echo "  Scheduling Agent: http://127.0.0.1:8003"
@@ -125,12 +177,26 @@ echo "  Orchestrator:     http://127.0.0.1:8000"
 if $UI_RUNNING; then
     echo "  Gradio UI:        http://127.0.0.1:7860"
 fi
+if $USE_SEMANTIC_ROUTER; then
+    echo "  Semantic Router:  127.0.0.1:50051 (llm-d-sc complexity)"
+fi
 echo ""
 if $USE_OLLAMA; then
     echo "  Mode: LIVE (Ollama + $MODEL_NAME)"
 else
     echo "  Mode: DEMO (simulated agent responses)"
 fi
+if $USE_SEMANTIC_ROUTER; then
+    echo "  Routing: SEMANTIC (llm-d-sc complexity classifier)"
+else
+    echo "  Routing: DEFAULT (comprehensive workflow)"
+fi
+if [ -n "$AGENT_AUTH_TOKEN" ]; then
+    echo "  Auth:    ENABLED (bearer token)"
+else
+    echo "  Auth:    DISABLED"
+fi
+echo "  MCP:     ENABLED (3 healthcare tools)"
 echo "════════════════════════════════════════════════════════════"
 echo "Press Ctrl+C to stop."
 echo ""

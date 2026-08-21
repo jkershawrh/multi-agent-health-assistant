@@ -69,3 +69,36 @@ agents:
       limits:
         cpu: "1"
         memory: "512Mi"
+
+# MCP tool server -- healthcare data tools for agent workflows
+mcpServer:
+  enabled: true
+  image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-agent:latest
+  port: 8004
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+# Agent authentication
+auth:
+  enabled: false
+  tokenSecretName: agent-auth-token
+
+# Semantic routing (llm-d-sc) -- classifies query complexity to select workflow
+semanticRouter:
+  enabled: true
+  image: quay.io/rh-ai-quickstart/llm-d-sc:latest
+  modelImage: quay.io/rh-ai-quickstart/llm-d-sc-modelcar:latest
+  grpcPort: 50051
+  classifier: complexity
+  resources:
+    requests:
+      cpu: "1"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "1Gi"

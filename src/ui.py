@@ -26,6 +26,21 @@ def run_workflow(query: str) -> str:
         return f"Connection error: {exc}"
 
     lines: list[str] = []
+
+    classification = data.get("classification")
+    if classification:
+        lines.append("--- Semantic Routing ---")
+        lines.append(f"  Classifier: {classification.get('classifier_id', 'N/A')}")
+        lines.append(f"  Selected:   {classification.get('selected_workflow', 'N/A')}")
+        lines.append(f"  Latency:    {classification.get('latency_ms', 'N/A')} ms")
+        signals = classification.get("signals", [])
+        if signals:
+            ranked = "  Signals:    " + ", ".join(
+                f"{s['label']}={s['score']:.3f}" for s in signals
+            )
+            lines.append(ranked)
+        lines.append("")
+
     for i, step in enumerate(data.get("steps", []), start=1):
         lines.append(f"--- Step {i} ---")
         lines.append(f"  Agent:   {step.get('agent', 'unknown')}")

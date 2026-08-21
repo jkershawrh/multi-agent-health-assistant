@@ -21,6 +21,17 @@ jobs:
       - run: pip install pyyaml pytest
       - run: make test-contracts
 
+  unit:
+    name: "Stage 2: Unit Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r src/requirements.txt pytest
+      - run: make test-unit
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

@@ -1,6 +1,6 @@
 # Coordinate AI agents to assist healthcare workflows
 
-Deploy cooperating AI agents that discover, delegate, and stream results to support clinical and administrative tasks.
+Deploy cooperating AI agents that discover, classify, and delegate tasks to support clinical and administrative workflows.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ Deploy cooperating AI agents that discover, delegate, and stream results to supp
 
 ## Overview
 
-Healthcare providers need AI systems that can coordinate across specialties -- triage, clinical analysis, and scheduling -- without creating data silos or vendor lock-in. This quickstart deploys three cooperative AI agents that discover each other using the Agent-to-Agent (A2A) protocol and execute multi-step patient triage workflows. Healthcare IT teams can use this as a starting point for building interoperable multi-agent systems on Red Hat OpenShift AI with Intel Xeon processors.
+Healthcare providers need AI systems that can coordinate across specialties -- triage, clinical analysis, and scheduling -- without creating data silos or vendor lock-in. This quickstart deploys three cooperative AI agents that discover each other using the Agent-to-Agent (A2A) protocol and execute multi-step patient triage workflows. An llm-d semantic classifier (llm-d-sc) classifies incoming queries by complexity and automatically selects the right workflow depth -- routing simple requests to fewer agents and complex cases to the full clinical pipeline. Healthcare IT teams can use this as a starting point for building interoperable multi-agent systems on Red Hat OpenShift AI with Intel Xeon processors.
 
 ## Who is this for
 
@@ -43,7 +43,7 @@ Healthcare providers need AI systems that can coordinate across specialties -- t
 
 Patient care coordination requires multiple specialized functions working together: assessing urgency, forming a clinical picture, and scheduling follow-up. Traditional monolithic systems bundle these into a single service, making it difficult to update, scale, or replace individual components. This quickstart decomposes the problem into three independent agents -- triage, clinical, and scheduling -- that communicate through the open A2A protocol.
 
-Each agent publishes a machine-readable agent card at `/.well-known/agent-card.json` describing its capabilities and skills. The orchestrator discovers agents automatically, maintains a live registry, and delegates tasks through JSON-RPC 2.0 calls. A patient triage workflow flows sequentially: the triage agent classifies urgency, the clinical agent suggests diagnoses and treatments, and the scheduling agent books follow-up appointments. Every step records measured latency for observability.
+Each agent publishes a machine-readable agent card at `/.well-known/agent-card.json` describing its capabilities and skills. The orchestrator discovers agents automatically, maintains a live registry, and delegates tasks through JSON-RPC 2.0 calls. Before executing a workflow, the orchestrator sends the patient query to llm-d-sc -- a low-latency Rust semantic classifier from the llm-d project -- which ranks the query's complexity (SIMPLE, MEDIUM, COMPLEX, REASONING). The orchestrator uses this signal to select the workflow depth: simple queries route only to the scheduling agent, moderate queries add triage, and complex cases invoke the full triage-clinical-scheduling pipeline. When llm-d-sc is unavailable, the orchestrator falls back to the comprehensive workflow. Every step records measured latency for observability.
 
 The system runs on a local Ollama instance serving the Qwen 2.5 1.5B model for lightweight inference. Each agent is pinned to a dedicated Intel Xeon core for isolation and predictable performance. A demo mode is available for evaluation and development without LLM backends. All responses carry an AI disclaimer: agent responses are AI-generated -- verify clinical recommendations with qualified healthcare professionals.
 
@@ -61,6 +61,10 @@ flowchart LR
         ORC["FastAPI\nA2A Discovery\nWorkflow Engine"]
     end
 
+    subgraph SemanticRouting["Semantic Routing"]
+        SC["llm-d-sc\n(gRPC :50051)\ncomplexity classifier"]
+    end
+
     subgraph Agents["A2A Agents (Intel Xeon -- 1 core per agent)"]
         TA["Triage Agent\n(port 8001)\nclassify | prioritize"]
         CA["Clinical Agent\n(port 8002)\ndiagnose | recommend"]
@@ -72,6 +76,8 @@ flowchart LR
     end
 
     Patient -->|"POST /api/v1/workflow"| ORC
+    ORC -->|"gRPC Classify"| SC
+    SC -->|"ranked signals"| ORC
     ORC -->|"A2A tasks/send"| TA
     ORC -->|"A2A tasks/send"| CA
     ORC -->|"A2A tasks/send"| SA
@@ -201,6 +207,7 @@ oc delete project multi-agent-health-assistant
 │   └── templates/
 │       ├── orchestrator-deployment.yaml
 │       ├── agent-deployments.yaml
+│       ├── semantic-router-deployment.yaml
 │       └── test-model-access.yaml
 ├── contracts/                # API contracts (OpenAPI)
 │   └── openapi/
@@ -211,10 +218,12 @@ oc delete project multi-agent-health-assistant
 │       ├── architecture.png
 │       └── screenshot.png
 ├── src/                      # Application source code
-│   ├── orchestrator.py       # FastAPI orchestrator (Python)
+│   ├── orchestrator.py       # FastAPI orchestrator with semantic routing
 │   ├── agent.py              # A2A-compliant agent template
 │   ├── models.py             # Pydantic models for A2A protocol
 │   ├── ui.py                 # Gradio UI (patient workflow, registry, stats)
+│   ├── classify_pb2.py       # Generated gRPC stubs (llm-d-sc)
+│   ├── classify_pb2_grpc.py  # Generated gRPC client (llm-d-sc)
 │   ├── Containerfile         # Container image definition
 │   └── requirements.txt      # Python dependencies
 ├── tests/                    # CDD -> TDD -> EDD validation
@@ -233,6 +242,7 @@ oc delete project multi-agent-health-assistant
 ## References
 
 - [A2A Protocol Specification](https://google.github.io/A2A/) -- Open protocol for agent-to-agent discovery, delegation, and task management.
+- [llm-d-sc Semantic Classifier](https://github.com/llm-d-incubation/llm-d-semantic-classifier) -- Low-latency Rust service for semantic classification of inference requests, part of the llm-d project.
 - [LangGraph Multi-Agent Patterns](https://langchain-ai.github.io/langgraph/) -- Framework for building stateful multi-agent applications with LLMs.
 - [Intel Xeon for Multi-Service Workloads](https://www.intel.com/content/www/us/en/products/details/processors/xeon.html) -- Core-per-agent isolation and predictable performance for AI services.
 - [Red Hat OpenShift AI Documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/) -- Enterprise AI platform for deploying and managing AI workloads.
@@ -243,7 +253,7 @@ oc delete project multi-agent-health-assistant
 ## Tags
 
 - **Title:** Coordinate AI agents to assist healthcare workflows
-- **Description:** Deploy cooperating AI agents that discover, delegate, and stream results to support clinical and administrative tasks.
+- **Description:** Deploy cooperating AI agents that discover, classify, and delegate tasks to support clinical and administrative workflows.
 - **Industry:** Healthcare provider
 - **Product:** Red Hat OpenShift AI
 - **Use case:** AI inference

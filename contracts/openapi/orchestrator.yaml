@@ -89,7 +89,7 @@ components:
   schemas:
     HealthResponse:
       type: object
-      required: [status, agents_discovered, agent_names]
+      required: [status, agents_discovered, agent_names, semantic_routing]
       properties:
         status:
           type: string
@@ -102,6 +102,10 @@ components:
           items:
             type: string
           example: ["triage", "clinical", "scheduling"]
+        semantic_routing:
+          type: string
+          enum: [active, inactive]
+          example: "active"
 
     AgentCapabilities:
       type: object
@@ -215,9 +219,9 @@ components:
           example: "Patient presents with chest pain and shortness of breath"
         workflow_type:
           type: string
-          enum: [patient_triage, general]
-          default: "general"
-          example: "patient_triage"
+          enum: [auto, lightweight, standard, comprehensive, patient_triage, general]
+          default: "auto"
+          example: "auto"
 
     WorkflowStep:
       type: object
@@ -237,6 +241,40 @@ components:
           format: float
           example: 45.2
 
+    ClassificationSignal:
+      type: object
+      required: [label, score]
+      properties:
+        label:
+          type: string
+          example: "COMPLEX"
+        score:
+          type: number
+          format: float
+          example: 0.872
+
+    ClassificationResult:
+      type: object
+      required: [classifier_id, status, signals, selected_workflow, latency_ms]
+      properties:
+        classifier_id:
+          type: string
+          example: "complexity"
+        status:
+          type: string
+          example: "ok"
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassificationSignal"
+        selected_workflow:
+          type: string
+          example: "comprehensive"
+        latency_ms:
+          type: number
+          format: float
+          example: 12.5
+
     WorkflowResponse:
       type: object
       required: [steps, total_latency_ms, agents_involved, ai_disclaimer]
@@ -254,6 +292,8 @@ components:
           items:
             type: string
           example: ["triage", "clinical", "scheduling"]
+        classification:
+          $ref: "#/components/schemas/ClassificationResult"
         ai_disclaimer:
           type: string
           example: "Agent responses are AI-generated -- verify clinical recommendations with qualified healthcare professionals."
