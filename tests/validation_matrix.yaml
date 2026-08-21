@@ -50,15 +50,15 @@ stages:
         required: true
 
   stage_2_unit:
-    description: "A2A protocol and multi-agent orchestration work in isolation"
+    description: "A2A-style teaching subset and multi-agent routing work in isolation"
     threshold: 90
     criteria:
       agent_card_served:
-        description: "Agent returns valid A2A agent card at /.well-known/agent-card.json"
+        description: "Agent returns the documented example card at /.well-known/agent-card.json"
         points: 15
         required: true
       a2a_task_send:
-        description: "tasks/send creates and returns completed task with artifacts"
+        description: "message/send creates and stores a completed task with labeled artifacts"
         points: 15
         required: true
       orchestrator_discovers_agents:
@@ -78,7 +78,7 @@ stages:
         points: 15
         required: true
       workflow_latency:
-        description: "Each workflow step reports positive latency_ms"
+        description: "Each workflow step reports non-negative measured latency_ms"
         points: 10
         required: true
 
@@ -99,7 +99,7 @@ stages:
         points: 15
         required: true
       ai_transparency_labels:
-        description: "AI-generated content labeled with persistent disclaimers"
+        description: "Demo and live-model content carry persistent source and safety labels"
         points: 10
         required: true
       health_endpoint:
@@ -107,7 +107,7 @@ stages:
         points: 10
         required: true
       error_handling:
-        description: "Agent unavailability produces user-friendly message"
+        description: "Agent failure stops the workflow without substituting simulated output"
         points: 10
         required: true
       compose_15_min:
@@ -145,7 +145,7 @@ stages:
         points: 15
         required: true
       architecture_diagram:
-        description: "Architecture diagram in docs/images/ with alt text"
+        description: "README contains a Mermaid architecture diagram"
         points: 10
         required: true
       no_credentials:

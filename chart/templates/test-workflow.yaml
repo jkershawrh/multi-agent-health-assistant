@@ -1,0 +1,36 @@
+{{- $image := printf "image-registry.openshift-image-registry.svc:5000/%s/%s:%s" .Release.Namespace .Release.Name .Values.image.tag -}}
+{{- if .Values.image.repository -}}
+{{- $image = printf "%s:%s" .Values.image.repository .Values.image.tag -}}
+{{- end }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-test-workflow"
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: test
+      image: {{ $image | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command: ["python", "-c"]
+      args:
+        - |
+          import httpx
+
+          base_url = "http://{{ .Release.Name }}-orchestrator:{{ .Values.orchestrator.port }}"
+          ready = httpx.get(f"{base_url}/ready", timeout=10)
+          ready.raise_for_status()
+          response = httpx.post(
+              f"{base_url}/api/v1/workflow",
+              json={
+                  "query": "Synthetic intake event for routing demonstration",
+                  "workflow_type": "patient_triage",
+              },
+              timeout=30,
+          )
+          response.raise_for_status()
+          payload = response.json()
+          assert payload["status"] == "completed", payload
+          print("Workflow smoke test: OK")
+  restartPolicy: Never

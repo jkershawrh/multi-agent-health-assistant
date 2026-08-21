@@ -8,22 +8,24 @@
 #   - Cost claims use "contributes to" / "estimate" language, never "guaranteed"
 
 claims:
-  - id: a2a-protocol
-    value: "Agent-to-Agent protocol for discovery and delegation"
+  - id: a2a-teaching-subset
+    value: "A2A 0.3-style discovery and JSON-RPC teaching subset"
     file: src/orchestrator.py
-    line: 1
-    source: "A2A protocol spec v0.2.6 -- implemented via /.well-known/agent-card.json and /a2a JSON-RPC"
-    source_url: ""
+    line: null
+    source: "Source and contract tests cover agent cards, message/send, and tasks/get"
+    source_url: "https://a2a-protocol.org/v0.3.0/specification/"
     verified: true
-    verified_date: "2025-01-15"
-    notes: "Protocol compliance verified by unit tests: agent card served, tasks/send works, tasks/get works"
+    verified_date: "2026-08-20"
+    notes: >
+      This is deliberately labeled as a teaching subset, not an A2A
+      conformance implementation. The latest released specification is 1.0.
 
   - id: multi-agent-workflow
     value: "3-agent cooperative workflow"
     file: src/orchestrator.py
-    line: 120
-    source: "Demonstrated by triage -> clinical -> scheduling pipeline executing in sequence via A2A"
+    line: null
+    source: "In-process integration test routes a synthetic scenario through all 3 agent APIs"
     source_url: ""
     verified: true
-    verified_date: "2025-01-15"
-    notes: "Workflow completion verified by unit test: test_workflow_completes"
+    verified_date: "2026-08-20"
+    notes: "Workflow completion is verified by tests/integration/test_workflow_api.py"

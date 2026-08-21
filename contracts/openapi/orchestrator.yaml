@@ -1,11 +1,10 @@
 openapi: "3.1.0"
 info:
-  title: Multi-Agent Health Assistant Orchestrator API
+  title: Multi-Agent Health Workflow Demo Orchestrator API
   description: >
-    Orchestrates cooperating AI agents using the A2A protocol for healthcare
-    workflows. Discovers agents via agent-card.json, maintains a registry,
-    and executes multi-step workflows by delegating tasks to specialized
-    agents (triage, clinical, scheduling). Runs on Intel Xeon CPU.
+    Routes synthetic scenarios through three teaching agents using a small
+    A2A 0.3-style JSON-RPC subset. This is not an A2A conformance
+    implementation or a medical system.
   version: "1.0.0"
   contact:
     name: Red Hat AI Quickstarts
@@ -29,26 +28,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
 
-  /.well-known/agent-card.json:
+  /ready:
     get:
-      operationId: getAgentCard
-      summary: A2A agent discovery
-      description: >
-        Returns the orchestrator's own A2A agent card for protocol-compliant
-        discovery by other agents or clients.
+      operationId: getReadiness
+      summary: Readiness check
+      description: Confirms that every configured teaching agent was discovered.
       responses:
         "200":
-          description: Agent card returned
+          description: Orchestrator is ready
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AgentCard"
+                $ref: "#/components/schemas/ReadyResponse"
+        "503":
+          description: One or more configured agents have not been discovered
 
   /api/v1/agents:
     get:
       operationId: listAgents
       summary: List discovered agents
-      description: Returns all agents discovered via A2A protocol.
+      description: Returns agents discovered from their example agent cards.
       responses:
         "200":
           description: List of discovered agents
@@ -62,9 +61,9 @@ paths:
       operationId: runWorkflow
       summary: Run a multi-agent workflow
       description: >
-        Executes a multi-agent workflow by delegating tasks to discovered
-        agents sequentially. Supports patient_triage and general workflow
-        types. Each step records the agent, action, result, and latency.
+        Routes synthetic text through discovered agents sequentially. Supports
+        patient_triage and general teaching workflows. Each step records the
+        role, action, result, and measured latency.
       requestBody:
         required: true
         content:
@@ -83,7 +82,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/HTTPValidationError"
 
 components:
   schemas:
@@ -94,6 +93,22 @@ components:
         status:
           type: string
           example: "healthy"
+        agents_discovered:
+          type: integer
+          example: 3
+        agent_names:
+          type: array
+          items:
+            type: string
+          example: ["triage", "clinical", "scheduling"]
+
+    ReadyResponse:
+      type: object
+      required: [status, agents_discovered, agent_names]
+      properties:
+        status:
+          type: string
+          enum: [ready]
         agents_discovered:
           type: integer
           example: 3
@@ -128,7 +143,7 @@ components:
           example: "Orchestrate Workflow"
         description:
           type: string
-          example: "Execute a multi-agent healthcare workflow"
+          example: "Execute a synthetic multi-agent teaching workflow"
         tags:
           type: array
           items:
@@ -140,7 +155,7 @@ components:
 
     AgentCard:
       type: object
-      required: [name, description, version, url, protocolVersion, skills]
+      required: [name, description, version, url, protocolVersion, preferredTransport, skills]
       properties:
         name:
           type: string
@@ -153,10 +168,13 @@ components:
         url:
           type: string
           format: uri
-          example: "http://localhost:8000"
+          example: "http://localhost:8001/a2a"
         protocolVersion:
           type: string
-          example: "0.2.6"
+          example: "0.3.0"
+        preferredTransport:
+          type: string
+          enum: [JSONRPC]
         provider:
           type: string
           example: "Red Hat / Intel"
@@ -212,7 +230,9 @@ components:
       properties:
         query:
           type: string
-          example: "Patient presents with chest pain and shortness of breath"
+          minLength: 1
+          maxLength: 2000
+          example: "Synthetic intake event for routing demonstration"
         workflow_type:
           type: string
           enum: [patient_triage, general]
@@ -231,7 +251,7 @@ components:
           example: "classify"
         result:
           type: string
-          example: "Urgency classification: URGENT"
+          example: "[DEMO SIMULATION] Triage-routing handoff complete"
         latency_ms:
           type: number
           format: float
@@ -254,15 +274,35 @@ components:
           items:
             type: string
           example: ["triage", "clinical", "scheduling"]
+        status:
+          type: string
+          enum: [completed, failed]
+          default: completed
+        failed_step:
+          type: [string, "null"]
         ai_disclaimer:
           type: string
-          example: "Agent responses are AI-generated -- verify clinical recommendations with qualified healthcare professionals."
+          example: "Educational simulation only. It does not provide medical advice, diagnosis, treatment, triage, scheduling, or emergency services. Use synthetic data only."
 
-    ErrorResponse:
+    HTTPValidationError:
       type: object
-      required: [error]
       properties:
-        error:
-          type: string
         detail:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+
+    ValidationError:
+      type: object
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+        msg:
+          type: string
+        type:
           type: string

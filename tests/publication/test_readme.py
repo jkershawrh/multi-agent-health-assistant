@@ -60,16 +60,16 @@ def readme_lines(readme_text):
 class TestTitleAndDescription:
 
     def test_h1_exists(self, readme_lines):
-        h1_lines = [l for l in readme_lines if l.startswith("# ")]
+        h1_lines = [line for line in readme_lines if line.startswith("# ")]
         assert len(h1_lines) >= 1, "No H1 heading found"
 
     def test_h1_under_64_chars(self, readme_lines):
-        h1 = next(l for l in readme_lines if l.startswith("# "))
+        h1 = next(line for line in readme_lines if line.startswith("# "))
         title = h1.lstrip("# ").strip()
         assert len(title) <= 64, f"H1 title is {len(title)} chars, max 64: '{title}'"
 
     def test_h1_starts_with_action_verb(self, readme_lines):
-        h1 = next(l for l in readme_lines if l.startswith("# "))
+        h1 = next(line for line in readme_lines if line.startswith("# "))
         title = h1.lstrip("# ").strip()
         first_word = title.split()[0] if title.split() else ""
         action_verbs = [
@@ -86,7 +86,7 @@ class TestTitleAndDescription:
         )
 
     def test_short_description_exists(self, readme_lines):
-        h1_idx = next(i for i, l in enumerate(readme_lines) if l.startswith("# "))
+        h1_idx = next(i for i, line in enumerate(readme_lines) if line.startswith("# "))
         desc_lines = []
         for line in readme_lines[h1_idx + 1:]:
             if line.startswith(("#", "## ")):
@@ -96,7 +96,7 @@ class TestTitleAndDescription:
         assert desc_lines, "No short description found after H1"
 
     def test_short_description_under_160_chars(self, readme_lines):
-        h1_idx = next(i for i, l in enumerate(readme_lines) if l.startswith("# "))
+        h1_idx = next(i for i, line in enumerate(readme_lines) if line.startswith("# "))
         desc_lines = []
         for line in readme_lines[h1_idx + 1:]:
             if line.startswith("#"):
@@ -120,8 +120,10 @@ class TestRequiredSections:
 
     def test_architecture_diagram_exists(self):
         assert DOCS_IMAGES.exists(), "docs/images/ directory not found"
-        images = list(DOCS_IMAGES.glob("*"))
-        assert images, "No architecture diagram found in docs/images/"
+
+    def test_mermaid_architecture_is_documented(self, readme_text):
+        assert "```mermaid" in readme_text
+        assert "flowchart" in readme_text
 
     def test_architecture_diagram_has_alt_text(self, readme_text):
         img_refs = re.findall(r"!\[([^\]]*)\]", readme_text)
@@ -152,7 +154,11 @@ class TestTags:
         tags_match = re.search(r"^##\s+Tags\s*\n(.*?)(?=^##|\Z)", readme_text, re.MULTILINE | re.DOTALL)
         if not tags_match:
             pytest.skip("No Tags section")
-        tag_lines = [l.strip() for l in tags_match.group(1).splitlines() if l.strip().startswith("-")]
+        tag_lines = [
+            line.strip()
+            for line in tags_match.group(1).splitlines()
+            if line.strip().startswith("-")
+        ]
         for line in tag_lines:
             assert re.match(r"^-\s+\*\*\w[\w\s]*:\*\*\s+.+", line), (
                 f"Tag line not in '- **Key:** value' format: '{line}'"
@@ -201,3 +207,15 @@ class TestLinks:
                 continue
             target = ROOT / link
             assert target.exists(), f"Broken internal link: {link}"
+
+
+class TestSafetyBoundaries:
+    def test_readme_requires_synthetic_data(self, readme_text):
+        lowered = readme_text.lower()
+        assert "synthetic data" in lowered
+        assert "not medical advice" in lowered
+
+    def test_readme_does_not_claim_protocol_conformance(self, readme_text):
+        lowered = readme_text.lower()
+        assert "not an a2a conformance implementation" in lowered
+        assert "stream results" not in lowered

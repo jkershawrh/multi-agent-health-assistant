@@ -1,6 +1,6 @@
 apiVersion: v2
 name: multi-agent-health-assistant
-description: Deploy cooperating AI agents that discover, delegate, and stream results using the Agent-to-Agent protocol.
+description: Build and run an educational multi-agent routing demo with an A2A-style JSON-RPC subset.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

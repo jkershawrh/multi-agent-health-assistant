@@ -1,4 +1,4 @@
-"""Gradio UI for the Multi-Agent Health Assistant."""
+"""Gradio UI for the synthetic multi-agent health workflow demo."""
 
 import os
 
@@ -9,9 +9,9 @@ ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://localhost:8000")
 
 
 def run_workflow(query: str) -> str:
-    """POST a patient query to the orchestrator workflow endpoint."""
+    """POST an invented scenario to the orchestrator workflow endpoint."""
     if not query.strip():
-        return "Please enter a patient query."
+        return "Please enter an invented scenario."
     try:
         resp = httpx.post(
             f"{ORCHESTRATOR_URL}/api/v1/workflow",
@@ -21,11 +21,20 @@ def run_workflow(query: str) -> str:
         resp.raise_for_status()
         data = resp.json()
     except httpx.HTTPStatusError as exc:
-        return f"HTTP error {exc.response.status_code}: {exc.response.text}"
-    except httpx.RequestError as exc:
-        return f"Connection error: {exc}"
+        return f"Workflow request rejected (HTTP {exc.response.status_code})."
+    except httpx.RequestError:
+        return "Connection error: could not reach the orchestrator."
+    except ValueError:
+        return "Workflow response was not valid JSON."
+
+    if not isinstance(data, dict):
+        return "Workflow response had an unexpected shape."
 
     lines: list[str] = []
+    lines.append(f"Workflow status: {data.get('status', 'unknown')}")
+    if data.get("failed_step"):
+        lines.append(f"Stopped at: {data['failed_step']}")
+    lines.append("")
     for i, step in enumerate(data.get("steps", []), start=1):
         lines.append(f"--- Step {i} ---")
         lines.append(f"  Agent:   {step.get('agent', 'unknown')}")
@@ -39,10 +48,7 @@ def run_workflow(query: str) -> str:
         lines.append(f"Total latency: {total} ms")
 
     lines.append("")
-    lines.append(
-        "** AI Disclaimer: These results are AI-generated and must not "
-        "be used as a substitute for professional medical advice. **"
-    )
+    lines.append(f"**Safety boundary:** {data.get('ai_disclaimer', 'Educational demo only.')}")
     return "\n".join(lines)
 
 
@@ -56,12 +62,14 @@ def fetch_agents() -> str:
         resp.raise_for_status()
         agents = resp.json()
     except httpx.HTTPStatusError as exc:
-        return f"HTTP error {exc.response.status_code}: {exc.response.text}"
-    except httpx.RequestError as exc:
-        return f"Connection error: {exc}"
+        return f"Agent request rejected (HTTP {exc.response.status_code})."
+    except httpx.RequestError:
+        return "Connection error: could not reach the orchestrator."
+    except ValueError:
+        return "Agent response was not valid JSON."
 
-    agent_list = agents.get("agents", []) if isinstance(agents, dict) else agents
-    if not agent_list:
+    agent_list = agents.get("agents", []) if isinstance(agents, dict) else []
+    if not isinstance(agent_list, list) or not agent_list:
         return "No agents discovered."
 
     lines: list[str] = []
@@ -91,19 +99,19 @@ def fetch_stats() -> str:
         resp.raise_for_status()
         data = resp.json()
     except httpx.HTTPStatusError as exc:
-        return f"HTTP error {exc.response.status_code}: {exc.response.text}"
-    except httpx.RequestError as exc:
-        return f"Connection error: {exc}"
+        return f"Health request rejected (HTTP {exc.response.status_code})."
+    except httpx.RequestError:
+        return "Connection error: could not reach the orchestrator."
+    except ValueError:
+        return "Health response was not valid JSON."
+
+    if not isinstance(data, dict):
+        return "Health response had an unexpected shape."
 
     lines: list[str] = []
     lines.append(f"Status:      {data.get('status', 'N/A')}")
 
-    agent_count = (
-        data.get("agents_discovered")
-        or data.get("agent_count")
-        or data.get("agents_count")
-        or "N/A"
-    )
+    agent_count = data.get("agents_discovered", "N/A")
     lines.append(f"Agent count: {agent_count}")
 
     agent_names = data.get("agent_names", [])
@@ -117,14 +125,19 @@ def fetch_stats() -> str:
 # Build the Gradio interface
 # ---------------------------------------------------------------------------
 
-with gr.Blocks(title="Multi-Agent Health Assistant") as demo:
-    gr.Markdown("# Multi-Agent Health Assistant")
+with gr.Blocks(title="Multi-Agent Health Workflow Demo") as demo:
+    gr.Markdown("# Multi-Agent Health Workflow Demo")
+    gr.Markdown(
+        "Use invented scenarios only. This interface demonstrates software routing; "
+        "it does not provide care, triage, diagnosis, treatment, scheduling, or emergency help."
+    )
 
-    with gr.Tab("Patient Workflow"):
+    with gr.Tab("Synthetic Workflow"):
         query_input = gr.Textbox(
-            label="Patient Query",
-            placeholder="Describe the patient scenario...",
+            label="Invented Scenario",
+            placeholder="Example: Synthetic intake event for routing demonstration",
             lines=3,
+            max_lines=10,
         )
         run_btn = gr.Button("Run Workflow")
         workflow_output = gr.Textbox(label="Workflow Results", lines=20)
@@ -142,8 +155,8 @@ with gr.Blocks(title="Multi-Agent Health Assistant") as demo:
 
     gr.Markdown(
         "---\n"
-        "⚠️ Agent responses are AI-generated -- verify clinical "
-        "recommendations with qualified healthcare professionals."
+        "⚠️ Educational simulation only. Do not enter personal or health information. "
+        "This demo is not medical advice or an emergency service."
     )
 
 if __name__ == "__main__":

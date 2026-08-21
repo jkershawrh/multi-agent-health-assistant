@@ -1,3 +1,7 @@
+{{- $image := printf "image-registry.openshift-image-registry.svc:5000/%s/%s:%s" .Release.Namespace .Release.Name .Values.image.tag -}}
+{{- if .Values.image.repository -}}
+{{- $image = printf "%s:%s" .Values.image.repository .Values.image.tag -}}
+{{- end }}
 {{- range $name, $agent := .Values.agents }}
 ---
 apiVersion: apps/v1
@@ -22,7 +26,8 @@ spec:
     spec:
       containers:
         - name: {{ $name }}-agent
-          image: {{ $agent.image }}
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
             - containerPort: {{ $agent.port }}
           command: ["uvicorn", "agent:app", "--host", "0.0.0.0", "--port", "{{ $agent.port }}"]
@@ -33,6 +38,25 @@ spec:
               value: {{ $agent.env.AGENT_SKILLS | quote }}
             - name: AGENT_PORT
               value: {{ $agent.port | quote }}
+            - name: AGENT_PUBLIC_URL
+              value: "http://{{ $.Release.Name }}-{{ $name }}:{{ $agent.port }}/a2a"
+            {{- if $.Values.model.endpoint }}
+            - name: MODEL_ENDPOINT
+              value: {{ $.Values.model.endpoint | quote }}
+            {{- end }}
+            - name: MODEL_NAME
+              value: {{ $.Values.model.name | quote }}
+            {{- if $.Values.model.existingSecret }}
+            - name: MODEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.model.existingSecret | quote }}
+                  key: {{ $.Values.model.apiKeySecretKey | quote }}
+            {{- end }}
+            - name: DEMO_MODE
+              value: {{ if $.Values.model.endpoint }}"false"{{ else }}"true"{{ end }}
+            - name: MAX_STORED_TASKS
+              value: {{ $.Values.limits.maxStoredTasks | quote }}
           resources:
             {{- toYaml $agent.resources | nindent 12 }}
           livenessProbe:
@@ -43,7 +67,7 @@ spec:
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: {{ $agent.port }}
             initialDelaySeconds: 5
             periodSeconds: 10

@@ -14,50 +14,65 @@ jobs:
     name: "Stage 0: Contracts"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - run: pip install pyyaml pytest
+      - run: pip install -r src/requirements.txt pytest openapi-spec-validator
       - run: make test-contracts
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - run: pip install ruff
-      - run: ruff check src/ tests/ || true
+      - run: pip install ruff==0.16.4
+      - run: ruff check src/ tests/
+      - run: bash -n demo.sh
+
+  test:
+    name: "Stages 2-4: Unit, Integration, and Benchmarks"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: pip install -r src/requirements.txt pytest
+      - run: make test-unit test-integration test-benchmarks
+
+  compose-config:
+    name: Compose Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker compose config --quiet
 
   helm-lint:
     name: Helm Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
       - run: helm lint chart/
 
   readme-check:
     name: "Stage 5: Publication"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - run: pip install pytest
+      - run: pip install pytest pyyaml
       - run: make test-publication
 
   container-build:
     name: Container Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          for f in $(find src/ -name "Containerfile" -o -name "Dockerfile"); do
-            echo "Building $f (context: repo root)"
-            podman build -t test -f "$f" . || echo "WARN: $f build failed (may need specific base image)"
-          done
+      - uses: actions/checkout@v7
+      - run: podman build -t multi-agent-health-assistant:test -f src/Containerfile src/
