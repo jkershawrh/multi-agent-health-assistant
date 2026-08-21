@@ -105,8 +105,14 @@ done
 
 # ── Start Gradio UI (on :7860) ───────────────────────────────────────
 export ORCHESTRATOR_URL="http://127.0.0.1:8000"
-python3 ui.py &
-PIDS+=($!)
+UI_RUNNING=false
+if python3 -c "import gradio" 2>/dev/null; then
+    python3 ui.py &
+    PIDS+=($!)
+    UI_RUNNING=true
+else
+    echo "WARNING: Gradio requires Python 3.10+. UI skipped — API still available."
+fi
 
 echo ""
 echo "════════════════════════════════════════════════════════════"
@@ -116,7 +122,9 @@ echo "  Triage Agent:     http://127.0.0.1:8001"
 echo "  Clinical Agent:   http://127.0.0.1:8002"
 echo "  Scheduling Agent: http://127.0.0.1:8003"
 echo "  Orchestrator:     http://127.0.0.1:8000"
-echo "  Gradio UI:        http://127.0.0.1:7860"
+if $UI_RUNNING; then
+    echo "  Gradio UI:        http://127.0.0.1:7860"
+fi
 echo ""
 if $USE_OLLAMA; then
     echo "  Mode: LIVE (Ollama + $MODEL_NAME)"

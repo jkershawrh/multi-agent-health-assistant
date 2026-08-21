@@ -186,7 +186,7 @@ async def execute_workflow(
 
 def _extract_result_text(rpc_response: dict) -> str:
     """Extract text from A2A JSON-RPC response."""
-    if "error" in rpc_response:
+    if rpc_response.get("error"):
         return f"Error: {rpc_response['error']}"
 
     result = rpc_response.get("result", {})
