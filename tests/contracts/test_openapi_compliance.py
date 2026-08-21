@@ -1,7 +1,8 @@
 """Stage 0: Contract validation — OpenAPI specs parse and refs resolve."""
 import pathlib
-import yaml
+
 import pytest
+import yaml
 
 CONTRACTS_DIR = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "openapi"
 

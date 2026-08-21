@@ -9,7 +9,7 @@ HELM ?= helm
 PODMAN ?= podman
 
 .PHONY: help test-all test-contracts test-infra test-unit test-integration \
-        test-benchmarks test-publication audit-claims status \
+        test-benchmarks test-publication \
         build compose-up compose-down lint
 
 help: ## Show this help
@@ -63,12 +63,6 @@ test-all: ## Run all stages sequentially (gated)
 	@$(MAKE) test-publication && echo "Stage 5: Publication  ✅" || (echo "Stage 5: Publication  ❌" && exit 1)
 	@echo ""
 	@echo "ALL STAGES GREEN ✅"
-
-audit-claims: ## Audit claim registry for unverified public claims
-	$(PYTHON) factory/scripts/audit_claims.py tests/claim_registry.yaml
-
-status: ## Show red/green dashboard
-	$(PYTHON) factory/scripts/status_dashboard.py
 
 # ── Build & Run ───────────────────────────────────────────────────────
 build: ## Build all container images

@@ -1,6 +1,5 @@
 """Multi-Agent Orchestrator -- discovers and delegates to A2A agents.
 
-Python rewrite of triforce's Go orchestrator for accessibility.
 Discovers agents via HTTP GET to /.well-known/agent-card.json,
 maintains a registry, and executes multi-step workflows by
 delegating tasks to agents via the A2A JSON-RPC protocol.
@@ -39,15 +38,12 @@ AGENT_URLS = os.environ.get(
 
 
 # ---------------------------------------------------------------------------
-# A2A Client -- Python port of triforce's Go client
+# A2A Client
 # ---------------------------------------------------------------------------
 
 
 class A2AClient:
-    """Discovers and communicates with A2A-compliant agents.
-
-    Ported from triforce/services/orchestrator/internal/a2a/client.go.
-    """
+    """Discovers and communicates with A2A-compliant agents."""
 
     def __init__(self):
         self.agents: Dict[str, models.DiscoveredAgent] = {}

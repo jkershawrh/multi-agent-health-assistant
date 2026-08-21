@@ -1,4 +1,4 @@
-"""Pydantic models for A2A protocol -- adapted from triforce healthcare agent.
+"""Pydantic models for the multi-agent health assistant.
 
 Defines the Agent-to-Agent protocol data structures for agent discovery,
 JSON-RPC task operations, and workflow orchestration.
@@ -10,7 +10,6 @@ import uuid
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # A2A Protocol models

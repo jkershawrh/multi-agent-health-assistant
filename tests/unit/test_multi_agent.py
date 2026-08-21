@@ -12,8 +12,8 @@ Tests cover:
 
 import asyncio
 import os
-import sys
 import pathlib
+import sys
 
 import pytest
 
@@ -28,10 +28,9 @@ os.environ.setdefault("AGENT_PORT", "8001")
 
 from fastapi.testclient import TestClient
 
-import models
 import agent
+import models
 import orchestrator
-
 
 # ---------------------------------------------------------------------------
 # Helpers

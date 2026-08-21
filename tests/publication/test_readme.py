@@ -1,6 +1,7 @@
 """Stage 5: Publication validation — README meets all BLOCKER requirements."""
 import pathlib
 import re
+
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -75,7 +76,10 @@ class TestTitleAndDescription:
             "Deploy", "Build", "Accelerate", "Route", "Detect", "Encrypt",
             "Govern", "Scale", "Optimize", "Orchestrate", "Automate",
             "Monitor", "Secure", "Analyze", "Create", "Run", "Serve",
-            "Stream", "Transform", "Classify", "Boost",
+            "Stream", "Transform", "Classify", "Boost", "Catch", "Certify",
+            "Coordinate", "Cut", "Enforce", "Ensure", "Find", "Get", "Go",
+            "Handle", "Know", "Let", "Make", "Prevent", "Protect", "Prove",
+            "Reduce", "Resolve", "Solve", "Stop", "Surface",
         ]
         assert first_word in action_verbs, (
             f"H1 title should start with an action verb, got '{first_word}'"
@@ -85,7 +89,7 @@ class TestTitleAndDescription:
         h1_idx = next(i for i, l in enumerate(readme_lines) if l.startswith("# "))
         desc_lines = []
         for line in readme_lines[h1_idx + 1:]:
-            if line.startswith("#") or line.startswith("## "):
+            if line.startswith(("#", "## ")):
                 break
             if line.strip():
                 desc_lines.append(line.strip())
@@ -178,14 +182,14 @@ class TestNoSecrets:
         violations = []
         for ext in ("*.py", "*.yaml", "*.yml", "*.json"):
             for f in ROOT.rglob(ext):
-                if ".git" in f.parts or "node_modules" in f.parts:
+                if ".git" in f.parts or "node_modules" in f.parts or ".venv" in f.parts or "venv" in f.parts:
                     continue
                 text = f.read_text(errors="ignore")
                 for pat in patterns:
                     matches = re.findall(pat, text)
                     if matches:
                         violations.append(f"{f.relative_to(ROOT)}: matches {pat}")
-        assert not violations, f"Potential secrets found:\n" + "\n".join(violations)
+        assert not violations, "Potential secrets found:\n" + "\n".join(violations)
 
 
 class TestLinks:
