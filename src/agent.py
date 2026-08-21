@@ -8,7 +8,6 @@ Each agent instance is configured via environment variables:
 Demo mode: all agents return simulated responses without LLM backends.
 """
 
-import json
 import logging
 import os
 import random

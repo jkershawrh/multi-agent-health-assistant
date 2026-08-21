@@ -62,7 +62,7 @@ class TestWorkflowLatency:
             },
             timeout=60.0,
         )
-        wall_ms = (time.monotonic() - start) * 1000
+        _ = (time.monotonic() - start) * 1000
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["steps"]) == 3

@@ -7,13 +7,12 @@ processing. All data is simulated for demo purposes.
 
 import logging
 import os
-import uuid
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("mcp-server")
