@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   orchestrator:
     build:
@@ -10,9 +8,14 @@ services:
     environment:
       - AGENT_URLS=http://triage-agent:8001,http://clinical-agent:8002,http://scheduling-agent:8003
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_CONTEXT_CHARS=${MAX_CONTEXT_CHARS:-8000}
     command: ["uvicorn", "orchestrator:app", "--host", "0.0.0.0", "--port", "8000"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=5)
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,8 +26,6 @@ services:
         condition: service_healthy
       scheduling-agent:
         condition: service_healthy
-      ollama-pull:
-        condition: service_completed_successfully
 
   ollama:
     image: ollama/ollama
@@ -33,7 +34,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,6 +47,7 @@ services:
     entrypoint: ["ollama", "pull", "qwen2.5:1.5b"]
     environment:
       - OLLAMA_HOST=http://ollama:11434
+    restart: "no"
 
   triage-agent:
     build:
@@ -57,12 +59,20 @@ services:
       - AGENT_NAME=triage
       - AGENT_SKILLS=classify,prioritize
       - AGENT_PORT=8001
+      - AGENT_PUBLIC_URL=http://triage-agent:8001/a2a
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MODEL_ENDPOINT=http://ollama:11434/v1
-      - MODEL_NAME=qwen2.5:1.5b
+      - MODEL_ENDPOINT=${MODEL_ENDPOINT:-http://ollama:11434/v1}
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:1.5b}
+      - MODEL_API_KEY=${MODEL_API_KEY:-}
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - MAX_STORED_TASKS=${MAX_STORED_TASKS:-1000}
     command: ["uvicorn", "agent:app", "--host", "0.0.0.0", "--port", "8001"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8001/ready', timeout=5)
       interval: 10s
       timeout: 5s
       retries: 5
@@ -80,12 +90,20 @@ services:
       - AGENT_NAME=clinical
       - AGENT_SKILLS=diagnose,recommend
       - AGENT_PORT=8002
+      - AGENT_PUBLIC_URL=http://clinical-agent:8002/a2a
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MODEL_ENDPOINT=http://ollama:11434/v1
-      - MODEL_NAME=qwen2.5:1.5b
+      - MODEL_ENDPOINT=${MODEL_ENDPOINT:-http://ollama:11434/v1}
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:1.5b}
+      - MODEL_API_KEY=${MODEL_API_KEY:-}
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - MAX_STORED_TASKS=${MAX_STORED_TASKS:-1000}
     command: ["uvicorn", "agent:app", "--host", "0.0.0.0", "--port", "8002"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8002/ready', timeout=5)
       interval: 10s
       timeout: 5s
       retries: 5
@@ -103,18 +121,40 @@ services:
       - AGENT_NAME=scheduling
       - AGENT_SKILLS=schedule,notify
       - AGENT_PORT=8003
+      - AGENT_PUBLIC_URL=http://scheduling-agent:8003/a2a
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MODEL_ENDPOINT=http://ollama:11434/v1
-      - MODEL_NAME=qwen2.5:1.5b
+      - MODEL_ENDPOINT=${MODEL_ENDPOINT:-http://ollama:11434/v1}
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:1.5b}
+      - MODEL_API_KEY=${MODEL_API_KEY:-}
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - MAX_STORED_TASKS=${MAX_STORED_TASKS:-1000}
     command: ["uvicorn", "agent:app", "--host", "0.0.0.0", "--port", "8003"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8003/health"]
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8003/ready', timeout=5)
       interval: 10s
       timeout: 5s
       retries: 5
     depends_on:
       ollama-pull:
         condition: service_completed_successfully
+
+  ui:
+    profiles: ["ui"]
+    build:
+      context: ./src
+      dockerfile: Containerfile
+    command: ["python", "ui.py"]
+    ports:
+      - "7860:7860"
+    environment:
+      - ORCHESTRATOR_URL=http://orchestrator:8000
+    depends_on:
+      orchestrator:
+        condition: service_healthy
 
 volumes:
   ollama_data:

@@ -10,7 +10,7 @@ PODMAN ?= podman
 
 .PHONY: help test-all test-contracts test-infra test-unit test-integration \
         test-benchmarks test-publication \
-        build compose-up compose-down lint
+        audit-claims build compose-up compose-down lint
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -49,6 +49,10 @@ test-benchmarks: ## Stage 4 — Performance benchmarks against rubric
 # ── Stage 5: Publication ─────────────────────────────────────────────
 test-publication: ## Stage 5 — README and repo structure validation
 	$(PYTEST) tests/publication/ -v --tb=short
+	$(PYTHON) tests/audit_claims.py
+
+audit-claims: ## List public claims that still need evidence
+	$(PYTHON) tests/audit_claims.py
 
 # ── Aggregates ────────────────────────────────────────────────────────
 test-all: ## Run all stages sequentially (gated)
@@ -75,5 +79,5 @@ compose-down: ## Stop local dev stack
 	$(PODMAN) compose down -v
 
 lint: ## Lint Python, Helm, and README
-	$(PYTHON) -m ruff check src/ tests/ || true
-	$(HELM) lint chart/ || true
+	$(PYTHON) -m ruff check src/ tests/
+	$(HELM) lint chart/

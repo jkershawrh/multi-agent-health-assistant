@@ -1,15 +1,15 @@
 """Pydantic models for the multi-agent health assistant.
 
-Defines the Agent-to-Agent protocol data structures for agent discovery,
+Defines the small A2A 0.3-style teaching subset used for agent discovery,
 JSON-RPC task operations, and workflow orchestration.
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # A2A Protocol models
@@ -23,11 +23,11 @@ class AgentCapabilities(BaseModel):
 
 
 class AgentSkill(BaseModel):
-    id: str
-    name: str
-    description: str
-    tags: Optional[List[str]] = None
-    examples: Optional[List[str]] = None
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=500)
+    tags: Optional[List[str]] = Field(default=None, max_length=20)
+    examples: Optional[List[str]] = Field(default=None, max_length=10)
 
 
 class AgentCard(BaseModel):
@@ -35,56 +35,68 @@ class AgentCard(BaseModel):
     description: str
     version: str = "0.1.0"
     url: str = "http://localhost:8001"
-    protocolVersion: str = "0.2.6"
+    protocolVersion: str = "0.3.0"
+    preferredTransport: str = "JSONRPC"
     provider: str = "Red Hat / Intel"
-    capabilities: AgentCapabilities = AgentCapabilities()
-    defaultInputModes: List[str] = ["text"]
-    defaultOutputModes: List[str] = ["text"]
-    skills: List[AgentSkill] = []
+    capabilities: AgentCapabilities = Field(default_factory=AgentCapabilities)
+    defaultInputModes: List[str] = Field(default_factory=lambda: ["text/plain"])
+    defaultOutputModes: List[str] = Field(default_factory=lambda: ["text/plain"])
+    skills: List[AgentSkill] = Field(default_factory=list)
 
 
 class Part(BaseModel):
-    kind: str = "text"
-    text: Optional[str] = None
+    kind: Literal["text"] = "text"
+    text: str = Field(min_length=1, max_length=2_000)
 
 
 class Message(BaseModel):
     messageId: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    kind: str = "message"
-    role: str = "user"
-    parts: List[Part] = []
+    kind: Literal["message"] = "message"
+    role: Literal["user"] = "user"
+    parts: List[Part] = Field(min_length=1, max_length=10)
 
 
 class TaskStatus(BaseModel):
-    state: str = "submitted"
+    state: Literal["submitted", "working", "completed", "failed"] = "submitted"
     timestamp: Optional[str] = None
 
 
 class Artifact(BaseModel):
     artifactId: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    parts: List[Part] = []
+    parts: List[Part] = Field(min_length=1, max_length=10)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class Task(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), min_length=1, max_length=128)
     contextId: Optional[str] = None
-    status: TaskStatus = TaskStatus()
+    status: TaskStatus = Field(default_factory=TaskStatus)
     artifacts: Optional[List[Artifact]] = None
-    kind: str = "task"
+    kind: Literal["task"] = "task"
 
 
 class JsonRpcRequest(BaseModel):
-    jsonrpc: str = "2.0"
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    method: str
-    params: Optional[dict] = None
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        min_length=1,
+        max_length=128,
+    )
+    method: str = Field(min_length=1, max_length=64)
+    params: Optional[Dict[str, Any]] = None
 
 
 class JsonRpcResponse(BaseModel):
-    jsonrpc: str = "2.0"
+    jsonrpc: Literal["2.0"] = "2.0"
     id: str
     result: Optional[Task] = None
     error: Optional[dict] = None
+
+    @model_validator(mode="after")
+    def require_result_or_error(self):
+        if (self.result is None) == (self.error is None):
+            raise ValueError("JSON-RPC response must contain exactly one of result or error")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -96,12 +108,12 @@ class DiscoveredAgent(BaseModel):
     name: str
     url: str
     status: str = "active"
-    skills: List[AgentSkill] = []
+    skills: List[AgentSkill] = Field(default_factory=list)
 
 
 class WorkflowRequest(BaseModel):
-    query: str
-    workflow_type: str = "general"
+    query: str = Field(min_length=1, max_length=2_000)
+    workflow_type: Literal["patient_triage", "general"] = "general"
 
 
 class WorkflowStep(BaseModel):
@@ -115,7 +127,9 @@ class WorkflowResponse(BaseModel):
     steps: List[WorkflowStep]
     total_latency_ms: float
     agents_involved: List[str]
+    status: Literal["completed", "failed"] = "completed"
+    failed_step: Optional[str] = None
     ai_disclaimer: str = (
-        "Agent responses are AI-generated -- verify clinical "
-        "recommendations with qualified healthcare professionals."
+        "Educational simulation only. It does not provide medical advice, diagnosis, "
+        "treatment, triage, scheduling, or emergency services. Use synthetic data only."
     )

@@ -1,19 +1,33 @@
 ---
-# LLM configuration
-#
-# Option A: Bring your own model (MaaS - Model as a Service)
-# model:
-#   name: my-model
-#   endpoint: https://my-maas-instance:443
-#   api_key: my-api-key
-#
-# Option B: Deploy with demo mode (no model required)
-model: {}
+# By default, the OpenShift chart builds one image from this public source
+# repository and reuses it for the orchestrator and all three agent roles.
+build:
+  enabled: true
+  gitUri: https://github.com/jkershawrh/multi-agent-health-assistant.git
+  gitRef: main
+  contextDir: src
 
-# Orchestrator configuration
+# To use an existing image instead, set build.enabled=false and provide a
+# repository. The same image contains both agent.py and orchestrator.py.
+image:
+  repository: ""
+  tag: latest
+  pullPolicy: Always
+
+# OpenAI-compatible model configuration. Leave endpoint empty for the clearly
+# labeled simulator. Authentication is read from an existing Kubernetes Secret.
+model:
+  name: qwen2.5:1.5b
+  endpoint: ""
+  existingSecret: ""
+  apiKeySecretKey: api-key
+
+limits:
+  maxStoredTasks: 1000
+  maxContextChars: 8000
+
 orchestrator:
   replicas: 1
-  image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-orchestrator:latest
   port: 8000
   resources:
     requests:
@@ -23,18 +37,16 @@ orchestrator:
       cpu: "2"
       memory: "512Mi"
 
-# Agent configurations -- each runs on a dedicated Intel Xeon core
 agents:
   triage:
     replicas: 1
-    image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-agent:latest
     port: 8001
     env:
       AGENT_NAME: triage
       AGENT_SKILLS: classify,prioritize
     resources:
       requests:
-        cpu: "1"
+        cpu: "500m"
         memory: "256Mi"
       limits:
         cpu: "1"
@@ -42,14 +54,13 @@ agents:
 
   clinical:
     replicas: 1
-    image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-agent:latest
     port: 8002
     env:
       AGENT_NAME: clinical
       AGENT_SKILLS: diagnose,recommend
     resources:
       requests:
-        cpu: "1"
+        cpu: "500m"
         memory: "256Mi"
       limits:
         cpu: "1"
@@ -57,14 +68,13 @@ agents:
 
   scheduling:
     replicas: 1
-    image: quay.io/rh-ai-quickstart/multi-agent-health-assistant-agent:latest
     port: 8003
     env:
       AGENT_NAME: scheduling
       AGENT_SKILLS: schedule,notify
     resources:
       requests:
-        cpu: "1"
+        cpu: "500m"
         memory: "256Mi"
       limits:
         cpu: "1"

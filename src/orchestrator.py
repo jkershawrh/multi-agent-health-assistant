@@ -4,8 +4,8 @@ Discovers agents via HTTP GET to /.well-known/agent-card.json,
 maintains a registry, and executes multi-step workflows by
 delegating tasks to agents via the A2A JSON-RPC protocol.
 
-Demo mode: 3 built-in simulated agents (triage, clinical, scheduling)
-respond without real LLM backends.
+Demo mode: 3 built-in simulated roles (triage, clinical, scheduling)
+demonstrate message routing without medical output or real integrations.
 """
 
 import asyncio
@@ -18,7 +18,8 @@ from typing import Dict, List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import ValidationError
 
 import models
 
@@ -26,8 +27,8 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("orchestrator")
 
 AI_DISCLAIMER = (
-    "Agent responses are AI-generated -- verify clinical "
-    "recommendations with qualified healthcare professionals."
+    "Educational simulation only. It does not provide medical advice, diagnosis, "
+    "treatment, triage, scheduling, or emergency services. Use synthetic data only."
 )
 
 # Agent URLs to discover on startup (comma-separated)
@@ -35,6 +36,10 @@ AGENT_URLS = os.environ.get(
     "AGENT_URLS",
     "http://triage-agent:8001,http://clinical-agent:8002,http://scheduling-agent:8003",
 )
+MAX_CONTEXT_CHARS = int(os.environ.get("MAX_CONTEXT_CHARS", "8000"))
+
+if MAX_CONTEXT_CHARS < 2_000:
+    raise ValueError("MAX_CONTEXT_CHARS must be at least 2000")
 
 
 # ---------------------------------------------------------------------------
@@ -43,40 +48,37 @@ AGENT_URLS = os.environ.get(
 
 
 class A2AClient:
-    """Discovers and communicates with A2A-compliant agents."""
+    """Discovers and communicates with agents using the teaching subset."""
 
-    def __init__(self):
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None):
         self.agents: Dict[str, models.DiscoveredAgent] = {}
+        self.transport = transport
 
     async def discover(self, base_url: str) -> Optional[models.DiscoveredAgent]:
         """Fetch /.well-known/agent-card.json and register the agent."""
         url = f"{base_url.rstrip('/')}/.well-known/agent-card.json"
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with httpx.AsyncClient(timeout=10, transport=self.transport) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
-                card_data = resp.json()
+                card = models.AgentCard.model_validate(resp.json())
 
-            skills = [
-                models.AgentSkill(**s)
-                for s in card_data.get("skills", [])
-            ]
             agent = models.DiscoveredAgent(
-                name=card_data.get("name", "unknown"),
+                name=card.name,
                 url=base_url.rstrip("/"),
                 status="active",
-                skills=skills,
+                skills=card.skills,
             )
             self.agents[agent.name] = agent
             logger.info("Discovered agent: %s at %s (%d skills)",
-                        agent.name, base_url, len(skills))
+                        agent.name, base_url, len(agent.skills))
             return agent
-        except Exception as e:
+        except (httpx.HTTPError, ValidationError, ValueError) as e:
             logger.warning("Discovery failed for %s: %s", base_url, e)
             return None
 
     async def send_task(self, agent_name: str, text: str) -> dict:
-        """Send a tasks/send JSON-RPC request to a discovered agent."""
+        """Send a message/send JSON-RPC request to a discovered agent."""
         agent = self.agents.get(agent_name)
         if not agent:
             return {"error": f"Agent not found: {agent_name}"}
@@ -85,7 +87,7 @@ class A2AClient:
         rpc_request = {
             "jsonrpc": "2.0",
             "id": str(uuid.uuid4()),
-            "method": "tasks/send",
+            "method": "message/send",
             "params": {
                 "id": task_id,
                 "message": {
@@ -97,16 +99,30 @@ class A2AClient:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=30, transport=self.transport) as client:
                 resp = await client.post(
                     f"{agent.url}/a2a",
                     json=rpc_request,
                 )
                 resp.raise_for_status()
-                return resp.json()
-        except Exception as e:
+                rpc_response = models.JsonRpcResponse.model_validate(resp.json())
+                payload = rpc_response.model_dump(exclude_none=True)
+                if rpc_response.error:
+                    return payload
+                task = rpc_response.result
+                if (
+                    task is None
+                    or task.status.state != "completed"
+                    or not task.artifacts
+                ):
+                    return {"error": "Agent returned no completed artifact"}
+                return payload
+        except (ValidationError, ValueError) as e:
+            logger.error("Invalid response from %s: %s", agent_name, e)
+            return {"error": "Agent returned an invalid response"}
+        except httpx.HTTPError as e:
             logger.error("Task send to %s failed: %s", agent_name, e)
-            return {"error": str(e)}
+            return {"error": "Agent request failed"}
 
     def list_agents(self) -> List[models.DiscoveredAgent]:
         return list(self.agents.values())
@@ -140,10 +156,9 @@ async def execute_workflow(
     workflow_type: str = "general",
 ) -> models.WorkflowResponse:
     """Execute a multi-agent workflow by delegating tasks sequentially."""
-    steps_config = WORKFLOW_DEFINITIONS.get(
-        workflow_type,
-        WORKFLOW_DEFINITIONS["general"],
-    )
+    if workflow_type not in WORKFLOW_DEFINITIONS:
+        raise ValueError(f"Unknown workflow type: {workflow_type}")
+    steps_config = WORKFLOW_DEFINITIONS[workflow_type]
 
     steps: List[models.WorkflowStep] = []
     agents_involved: List[str] = []
@@ -171,8 +186,20 @@ async def execute_workflow(
         ))
         agents_involved.append(agent_name)
 
+        if result.get("error"):
+            return models.WorkflowResponse(
+                steps=steps,
+                total_latency_ms=round((time.monotonic() - total_start) * 1000, 2),
+                agents_involved=list(dict.fromkeys(agents_involved)),
+                status="failed",
+                failed_step=f"{agent_name}/{action}",
+                ai_disclaimer=AI_DISCLAIMER,
+            )
+
         # Accumulate context for next step
-        context = f"{context}\n\nPrevious step ({agent_name}/{action}): {result_text}"
+        context = (
+            f"{context}\n\nPrevious step ({agent_name}/{action}): {result_text}"
+        )[-MAX_CONTEXT_CHARS:]
 
     total_latency = round((time.monotonic() - total_start) * 1000, 2)
 
@@ -180,14 +207,17 @@ async def execute_workflow(
         steps=steps,
         total_latency_ms=total_latency,
         agents_involved=list(dict.fromkeys(agents_involved)),
+        status="completed",
         ai_disclaimer=AI_DISCLAIMER,
     )
 
 
 def _extract_result_text(rpc_response: dict) -> str:
     """Extract text from A2A JSON-RPC response."""
-    if "error" in rpc_response:
-        return f"Error: {rpc_response['error']}"
+    if rpc_response.get("error"):
+        error = rpc_response["error"]
+        message = error.get("message", "Agent request failed") if isinstance(error, dict) else "Agent request failed"
+        return f"Error: {message}"
 
     result = rpc_response.get("result", {})
     artifacts = result.get("artifacts", [])
@@ -200,7 +230,7 @@ def _extract_result_text(rpc_response: dict) -> str:
             if part.get("text"):
                 texts.append(part["text"])
 
-    return " ".join(texts) if texts else "No text in response"
+    return (" ".join(texts) if texts else "No text in response")[:4_000]
 
 
 # ---------------------------------------------------------------------------
@@ -210,17 +240,31 @@ def _extract_result_text(rpc_response: dict) -> str:
 a2a_client = A2AClient()
 
 
+def _configured_agent_urls() -> List[str]:
+    return [url.strip().rstrip("/") for url in AGENT_URLS.split(",") if url.strip()]
+
+
+async def _discover_missing_agents() -> None:
+    for url in _configured_agent_urls():
+        if not any(agent.url == url for agent in a2a_client.list_agents()):
+            await a2a_client.discover(url)
+
+
+async def _discovery_loop() -> None:
+    while True:
+        await _discover_missing_agents()
+        await asyncio.sleep(10)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Discover agents on startup."""
-    urls = [u.strip() for u in AGENT_URLS.split(",") if u.strip()]
+    urls = _configured_agent_urls()
     logger.info("Discovering %d agents...", len(urls))
 
     # Try discovery with retries for startup ordering
     for attempt in range(3):
-        for url in urls:
-            if not any(a.url == url.rstrip("/") for a in a2a_client.list_agents()):
-                await a2a_client.discover(url)
+        await _discover_missing_agents()
 
         discovered = len(a2a_client.list_agents())
         if discovered >= len(urls):
@@ -238,14 +282,22 @@ async def lifespan(app: FastAPI):
         "Agent discovery complete: %d agents registered",
         len(a2a_client.list_agents()),
     )
-    yield
+    discovery_task = asyncio.create_task(_discovery_loop())
+    try:
+        yield
+    finally:
+        discovery_task.cancel()
+        try:
+            await discovery_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
-    title="Multi-Agent Health Assistant Orchestrator",
+    title="Multi-Agent Health Workflow Demo Orchestrator",
     description=(
-        "Orchestrates cooperating AI agents using the A2A protocol "
-        "for healthcare workflows. Runs on Intel Xeon CPU."
+        "Routes synthetic scenarios through a small A2A 0.3-style teaching subset. "
+        "This is not a protocol-conformance or medical system."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -262,30 +314,20 @@ async def health():
     }
 
 
-@app.get("/.well-known/agent-card.json")
-async def orchestrator_agent_card():
-    """Serve the orchestrator's own A2A agent card."""
-    card = models.AgentCard(
-        name="orchestrator",
-        description=(
-            "Multi-agent orchestrator -- discovers and coordinates healthcare "
-            "AI agents using A2A protocol. Runs on Intel Xeon CPU."
-        ),
-        url="http://localhost:8000",
-        skills=[
-            models.AgentSkill(
-                id="orchestrate-workflow",
-                name="Orchestrate Workflow",
-                description="Execute a multi-agent healthcare workflow",
-                tags=["orchestration", "workflow", "multi-agent"],
-                examples=[
-                    "Run a patient triage workflow",
-                    "Coordinate care for this patient",
-                ],
-            ),
-        ],
-    )
-    return card.model_dump()
+@app.get("/ready")
+async def ready():
+    expected = len(_configured_agent_urls())
+    discovered = len(a2a_client.list_agents())
+    if discovered < expected:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Waiting for agents: discovered {discovered} of {expected}",
+        )
+    return {
+        "status": "ready",
+        "agents_discovered": discovered,
+        "agent_names": [agent.name for agent in a2a_client.list_agents()],
+    }
 
 
 @app.get("/api/v1/agents")
@@ -298,7 +340,7 @@ async def list_agents():
     }
 
 
-@app.post("/api/v1/workflow")
+@app.post("/api/v1/workflow", response_model=models.WorkflowResponse)
 async def run_workflow(request: models.WorkflowRequest):
     """Execute a multi-agent workflow."""
     return await execute_workflow(
