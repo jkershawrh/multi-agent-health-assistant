@@ -8,6 +8,8 @@ services:
     environment:
       - AGENT_URLS=http://triage-agent:8001,http://clinical-agent:8002,http://scheduling-agent:8003
       - SEMANTIC_ROUTER_ENDPOINT=llm-d-sc:50051
+      - MODEL_SIMPLE=qwen2.5:0.5b
+      - MODEL_COMPLEX=qwen2.5:1.5b
       - AGENT_AUTH_TOKEN=${AGENT_AUTH_TOKEN:-}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     command: ["uvicorn", "orchestrator:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -45,7 +47,7 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    entrypoint: ["ollama", "pull", "qwen2.5:1.5b"]
+    entrypoint: ["sh", "-c", "ollama pull qwen2.5:0.5b && ollama pull qwen2.5:1.5b"]
     environment:
       - OLLAMA_HOST=http://ollama:11434
 

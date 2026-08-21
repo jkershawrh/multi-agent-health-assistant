@@ -109,6 +109,7 @@ class ClassificationResult(BaseModel):
     status: str
     signals: List[ClassificationSignal] = []
     selected_workflow: str
+    selected_model: str = ""
     latency_ms: float
 
 

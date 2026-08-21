@@ -28,6 +28,10 @@ spec:
             {{- if .Values.semanticRouter.enabled }}
             - name: SEMANTIC_ROUTER_ENDPOINT
               value: "{{ .Release.Name }}-semantic-router:{{ .Values.semanticRouter.grpcPort }}"
+            - name: MODEL_SIMPLE
+              value: {{ .Values.semanticRouter.modelSimple | default "qwen2.5:0.5b" | quote }}
+            - name: MODEL_COMPLEX
+              value: {{ .Values.semanticRouter.modelComplex | default "qwen2.5:1.5b" | quote }}
             {{- end }}
             {{- if .Values.auth.enabled }}
             - name: AGENT_AUTH_TOKEN

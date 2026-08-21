@@ -207,14 +207,15 @@ def _demo_response(text: str) -> str:
     )
 
 
-async def _llm_response(text: str) -> str:
+async def _llm_response(text: str, model_name: str = "") -> str:
     """Call the LLM via the OpenAI-compatible endpoint and return its reply."""
+    use_model = model_name or MODEL_NAME
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{MODEL_ENDPOINT}/chat/completions",
                 json={
-                    "model": MODEL_NAME,
+                    "model": use_model,
                     "messages": [
                         {
                             "role": "system",
@@ -354,6 +355,7 @@ async def a2a_endpoint(request: models.JsonRpcRequest):
     if request.method == "tasks/send":
         params = request.params or {}
         task_id = params.get("id", str(uuid.uuid4()))
+        model_override = params.get("model_override", "")
         message = params.get("message", {})
         parts = message.get("parts", [])
         text = parts[0].get("text", "") if parts else ""
@@ -364,7 +366,7 @@ async def a2a_endpoint(request: models.JsonRpcRequest):
         enriched_text = f"{text}\n\nTool results:\n{tool_context}" if tool_context else text
 
         if MODEL_ENDPOINT and not DEMO_MODE:
-            response_text = await _llm_response(enriched_text)
+            response_text = await _llm_response(enriched_text, model_override)
         else:
             response_text = _demo_response(text)
 

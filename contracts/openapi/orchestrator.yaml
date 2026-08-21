@@ -270,6 +270,9 @@ components:
         selected_workflow:
           type: string
           example: "comprehensive"
+        selected_model:
+          type: string
+          example: "complex"
         latency_ms:
           type: number
           format: float

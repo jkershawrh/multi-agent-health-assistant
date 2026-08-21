@@ -47,6 +47,9 @@ AGENT_URLS = os.environ.get(
 
 SEMANTIC_ROUTER_ENDPOINT = os.environ.get("SEMANTIC_ROUTER_ENDPOINT", "")
 
+MODEL_SIMPLE = os.environ.get("MODEL_SIMPLE", "qwen2.5:0.5b")
+MODEL_COMPLEX = os.environ.get("MODEL_COMPLEX", "qwen2.5:1.5b")
+
 
 # ---------------------------------------------------------------------------
 # A2A Client
@@ -91,25 +94,31 @@ class A2AClient:
             logger.warning("Discovery failed for %s: %s", base_url, e)
             return None
 
-    async def send_task(self, agent_name: str, text: str) -> dict:
+    async def send_task(
+        self, agent_name: str, text: str, model_override: str = ""
+    ) -> dict:
         """Send a tasks/send JSON-RPC request to a discovered agent."""
         agent = self.agents.get(agent_name)
         if not agent:
             return {"error": f"Agent not found: {agent_name}"}
 
         task_id = str(uuid.uuid4())
+        params: dict = {
+            "id": task_id,
+            "message": {
+                "messageId": str(uuid.uuid4()),
+                "role": "user",
+                "parts": [{"kind": "text", "text": text}],
+            },
+        }
+        if model_override:
+            params["model_override"] = model_override
+
         rpc_request = {
             "jsonrpc": "2.0",
             "id": str(uuid.uuid4()),
             "method": "tasks/send",
-            "params": {
-                "id": task_id,
-                "message": {
-                    "messageId": str(uuid.uuid4()),
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": text}],
-                },
-            },
+            "params": params,
         }
 
         try:
@@ -141,6 +150,13 @@ COMPLEXITY_TO_WORKFLOW = {
     "MEDIUM": "standard",
     "COMPLEX": "comprehensive",
     "REASONING": "comprehensive",
+}
+
+COMPLEXITY_TO_MODEL = {
+    "SIMPLE": "simple",
+    "MEDIUM": "simple",
+    "COMPLEX": "complex",
+    "REASONING": "complex",
 }
 
 
@@ -190,12 +206,14 @@ class SemanticRouter:
             ]
             top_label = signals[0].label if signals else "COMPLEX"
             selected = COMPLEXITY_TO_WORKFLOW.get(top_label, "comprehensive")
+            model_tier = COMPLEXITY_TO_MODEL.get(top_label, "complex")
 
             return models.ClassificationResult(
                 classifier_id=response.classifier_id,
                 status="ok",
                 signals=signals,
                 selected_workflow=selected,
+                selected_model=model_tier,
                 latency_ms=latency_ms,
             )
         except Exception as e:
@@ -245,14 +263,22 @@ async def execute_workflow(
     """Execute a multi-agent workflow by delegating tasks sequentially."""
     classification = None
 
+    model_override = ""
+
     if workflow_type == "auto" and semantic_router.stub:
         classification = await semantic_router.classify(query)
         if classification:
             workflow_type = classification.selected_workflow
+            model_tier = classification.selected_model
+            if model_tier == "simple":
+                model_override = MODEL_SIMPLE
+            else:
+                model_override = MODEL_COMPLEX
             logger.info(
-                "Semantic routing: %s -> %s (top signal: %s %.3f)",
+                "Semantic routing: %s -> %s, model=%s (top signal: %s %.3f)",
                 workflow_type,
                 classification.selected_workflow,
+                model_override,
                 classification.signals[0].label if classification.signals else "?",
                 classification.signals[0].score if classification.signals else 0,
             )
@@ -275,9 +301,8 @@ async def execute_workflow(
     for agent_name, action in steps_config:
         step_start = time.monotonic()
 
-        # Include previous step results in the context
         task_text = f"[{action}] {context}"
-        result = await a2a_client.send_task(agent_name, task_text)
+        result = await a2a_client.send_task(agent_name, task_text, model_override)
 
         step_latency = round((time.monotonic() - step_start) * 1000, 2)
 

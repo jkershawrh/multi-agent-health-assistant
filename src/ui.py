@@ -31,7 +31,10 @@ def run_workflow(query: str) -> str:
     if classification:
         lines.append("--- Semantic Routing ---")
         lines.append(f"  Classifier: {classification.get('classifier_id', 'N/A')}")
-        lines.append(f"  Selected:   {classification.get('selected_workflow', 'N/A')}")
+        lines.append(f"  Workflow:   {classification.get('selected_workflow', 'N/A')}")
+        selected_model = classification.get("selected_model", "")
+        if selected_model:
+            lines.append(f"  Model:      {selected_model}")
         lines.append(f"  Latency:    {classification.get('latency_ms', 'N/A')} ms")
         signals = classification.get("signals", [])
         if signals:

@@ -95,6 +95,8 @@ semanticRouter:
   modelImage: quay.io/rh-ai-quickstart/llm-d-sc-modelcar:latest
   grpcPort: 50051
   classifier: complexity
+  modelSimple: "qwen2.5:0.5b"
+  modelComplex: "qwen2.5:1.5b"
   resources:
     requests:
       cpu: "1"

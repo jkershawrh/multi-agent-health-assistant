@@ -27,21 +27,29 @@ source "$VENV_DIR/bin/activate"
 pip install -q -r "$SRC_DIR/requirements.txt"
 
 # ── Ollama (optional) ───────────────────────────────────────────────
-MODEL_NAME="qwen2.5:1.5b"
+MODEL_SIMPLE="qwen2.5:0.5b"
+MODEL_COMPLEX="qwen2.5:1.5b"
+MODEL_NAME="$MODEL_COMPLEX"
 USE_OLLAMA=false
 
 if command -v ollama &>/dev/null; then
-    echo "Ollama found — checking if $MODEL_NAME is available..."
-    if ollama list 2>/dev/null | grep -q "$MODEL_NAME"; then
-        echo "Model $MODEL_NAME ready."
+    echo "Ollama found — checking models..."
+    MODELS_READY=true
+    for model in "$MODEL_SIMPLE" "$MODEL_COMPLEX"; do
+        if ollama list 2>/dev/null | grep -q "$model"; then
+            echo "  $model ready."
+        else
+            echo "  Pulling $model (this may take a minute)..."
+            if ! ollama pull "$model"; then
+                echo "  Pull failed for $model."
+                MODELS_READY=false
+            fi
+        fi
+    done
+    if $MODELS_READY; then
         USE_OLLAMA=true
     else
-        echo "Pulling $MODEL_NAME (this may take a minute)..."
-        if ollama pull "$MODEL_NAME"; then
-            USE_OLLAMA=true
-        else
-            echo "Pull failed — falling back to demo mode."
-        fi
+        echo "Not all models available — falling back to demo mode."
     fi
 else
     echo "Ollama not found — running in demo mode (simulated agent responses)."
@@ -51,12 +59,16 @@ fi
 if $USE_OLLAMA; then
     export MODEL_ENDPOINT="http://localhost:11434/v1"
     export MODEL_NAME
+    export MODEL_SIMPLE
+    export MODEL_COMPLEX
     export DEMO_MODE="false"
     echo "Starting agents in LIVE mode (Ollama)..."
 else
     export DEMO_MODE="true"
     export MODEL_ENDPOINT=""
     export MODEL_NAME
+    export MODEL_SIMPLE
+    export MODEL_COMPLEX
     echo "Starting agents in DEMO mode..."
 fi
 
@@ -182,7 +194,8 @@ if $USE_SEMANTIC_ROUTER; then
 fi
 echo ""
 if $USE_OLLAMA; then
-    echo "  Mode: LIVE (Ollama + $MODEL_NAME)"
+    echo "  Mode: LIVE (Ollama)"
+    echo "  Models: $MODEL_SIMPLE (simple) / $MODEL_COMPLEX (complex)"
 else
     echo "  Mode: DEMO (simulated agent responses)"
 fi
