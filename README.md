@@ -240,6 +240,7 @@ curl -s "https://${ROUTE_HOST}/ready"
 helm test multi-agent-health-assistant
 
 # Local automated checks
+python -m pip install -r src/requirements.txt pytest openapi-spec-validator ruff==0.16.4
 python -m pytest -q
 ruff check src tests
 ```

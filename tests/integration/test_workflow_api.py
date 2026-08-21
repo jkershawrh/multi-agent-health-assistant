@@ -10,9 +10,8 @@ from fastapi.testclient import TestClient
 SRC_DIR = pathlib.Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-import agent  # noqa: E402
-import orchestrator  # noqa: E402
-
+import agent
+import orchestrator
 
 AGENT_PORTS = {"triage": 8001, "clinical": 8002, "scheduling": 8003}
 

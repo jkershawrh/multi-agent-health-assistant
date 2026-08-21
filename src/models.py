@@ -7,7 +7,7 @@ JSON-RPC task operations, and workflow orchestration.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -26,8 +26,8 @@ class AgentSkill(BaseModel):
     id: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=500)
-    tags: Optional[List[str]] = Field(default=None, max_length=20)
-    examples: Optional[List[str]] = Field(default=None, max_length=10)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    examples: list[str] | None = Field(default=None, max_length=10)
 
 
 class AgentCard(BaseModel):
@@ -39,9 +39,9 @@ class AgentCard(BaseModel):
     preferredTransport: str = "JSONRPC"
     provider: str = "Red Hat / Intel"
     capabilities: AgentCapabilities = Field(default_factory=AgentCapabilities)
-    defaultInputModes: List[str] = Field(default_factory=lambda: ["text/plain"])
-    defaultOutputModes: List[str] = Field(default_factory=lambda: ["text/plain"])
-    skills: List[AgentSkill] = Field(default_factory=list)
+    defaultInputModes: list[str] = Field(default_factory=lambda: ["text/plain"])
+    defaultOutputModes: list[str] = Field(default_factory=lambda: ["text/plain"])
+    skills: list[AgentSkill] = Field(default_factory=list)
 
 
 class Part(BaseModel):
@@ -53,25 +53,25 @@ class Message(BaseModel):
     messageId: str = Field(default_factory=lambda: str(uuid.uuid4()))
     kind: Literal["message"] = "message"
     role: Literal["user"] = "user"
-    parts: List[Part] = Field(min_length=1, max_length=10)
+    parts: list[Part] = Field(min_length=1, max_length=10)
 
 
 class TaskStatus(BaseModel):
     state: Literal["submitted", "working", "completed", "failed"] = "submitted"
-    timestamp: Optional[str] = None
+    timestamp: str | None = None
 
 
 class Artifact(BaseModel):
     artifactId: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    parts: List[Part] = Field(min_length=1, max_length=10)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    parts: list[Part] = Field(min_length=1, max_length=10)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class Task(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), min_length=1, max_length=128)
-    contextId: Optional[str] = None
+    contextId: str | None = None
     status: TaskStatus = Field(default_factory=TaskStatus)
-    artifacts: Optional[List[Artifact]] = None
+    artifacts: list[Artifact] | None = None
     kind: Literal["task"] = "task"
 
 
@@ -83,14 +83,14 @@ class JsonRpcRequest(BaseModel):
         max_length=128,
     )
     method: str = Field(min_length=1, max_length=64)
-    params: Optional[Dict[str, Any]] = None
+    params: dict[str, Any] | None = None
 
 
 class JsonRpcResponse(BaseModel):
     jsonrpc: Literal["2.0"] = "2.0"
     id: str
-    result: Optional[Task] = None
-    error: Optional[dict] = None
+    result: Task | None = None
+    error: dict | None = None
 
     @model_validator(mode="after")
     def require_result_or_error(self):
@@ -108,7 +108,7 @@ class DiscoveredAgent(BaseModel):
     name: str
     url: str
     status: str = "active"
-    skills: List[AgentSkill] = Field(default_factory=list)
+    skills: list[AgentSkill] = Field(default_factory=list)
 
 
 class WorkflowRequest(BaseModel):
@@ -124,11 +124,11 @@ class WorkflowStep(BaseModel):
 
 
 class WorkflowResponse(BaseModel):
-    steps: List[WorkflowStep]
+    steps: list[WorkflowStep]
     total_latency_ms: float
-    agents_involved: List[str]
+    agents_involved: list[str]
     status: Literal["completed", "failed"] = "completed"
-    failed_step: Optional[str] = None
+    failed_step: str | None = None
     ai_disclaimer: str = (
         "Educational simulation only. It does not provide medical advice, diagnosis, "
         "treatment, triage, scheduling, or emergency services. Use synthetic data only."

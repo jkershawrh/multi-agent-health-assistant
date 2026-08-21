@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 SRC_DIR = pathlib.Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-import agent  # noqa: E402
-import models  # noqa: E402
-import orchestrator  # noqa: E402
+import agent
+import models
+import orchestrator
 
 
 def _run(coro):

@@ -14,7 +14,6 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Dict, List, Optional
 
 import httpx
 import uvicorn
@@ -51,10 +50,10 @@ class A2AClient:
     """Discovers and communicates with agents using the teaching subset."""
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None):
-        self.agents: Dict[str, models.DiscoveredAgent] = {}
+        self.agents: dict[str, models.DiscoveredAgent] = {}
         self.transport = transport
 
-    async def discover(self, base_url: str) -> Optional[models.DiscoveredAgent]:
+    async def discover(self, base_url: str) -> models.DiscoveredAgent | None:
         """Fetch /.well-known/agent-card.json and register the agent."""
         url = f"{base_url.rstrip('/')}/.well-known/agent-card.json"
         try:
@@ -124,10 +123,10 @@ class A2AClient:
             logger.error("Task send to %s failed: %s", agent_name, e)
             return {"error": "Agent request failed"}
 
-    def list_agents(self) -> List[models.DiscoveredAgent]:
+    def list_agents(self) -> list[models.DiscoveredAgent]:
         return list(self.agents.values())
 
-    def get_agent(self, name: str) -> Optional[models.DiscoveredAgent]:
+    def get_agent(self, name: str) -> models.DiscoveredAgent | None:
         return self.agents.get(name)
 
 
@@ -160,8 +159,8 @@ async def execute_workflow(
         raise ValueError(f"Unknown workflow type: {workflow_type}")
     steps_config = WORKFLOW_DEFINITIONS[workflow_type]
 
-    steps: List[models.WorkflowStep] = []
-    agents_involved: List[str] = []
+    steps: list[models.WorkflowStep] = []
+    agents_involved: list[str] = []
     total_start = time.monotonic()
 
     # Build context that accumulates across steps
@@ -240,7 +239,7 @@ def _extract_result_text(rpc_response: dict) -> str:
 a2a_client = A2AClient()
 
 
-def _configured_agent_urls() -> List[str]:
+def _configured_agent_urls() -> list[str]:
     return [url.strip().rstrip("/") for url in AGENT_URLS.split(",") if url.strip()]
 
 

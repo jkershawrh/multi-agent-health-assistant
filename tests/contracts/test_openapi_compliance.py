@@ -10,8 +10,8 @@ CONTRACTS_DIR = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "ope
 SRC_DIR = pathlib.Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-import agent  # noqa: E402
-import orchestrator  # noqa: E402
+import agent
+import orchestrator
 
 APPS = {
     "agent.yaml": agent.app,
